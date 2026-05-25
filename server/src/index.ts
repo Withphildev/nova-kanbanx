@@ -1,9 +1,11 @@
 import cors from 'cors'
 import Database from 'better-sqlite3'
 import express from 'express'
+import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT ?? 3001)
-const db = new Database('kanban.db')
+const dbPath = process.env.KANBAN_DB_PATH?.trim() || fileURLToPath(new URL('../kanban.db', import.meta.url))
+const db = new Database(dbPath)
 const workflowHookUrl = process.env.OPENCLAW_WORKFLOW_HOOK_URL?.trim()
 
 export const app = express()

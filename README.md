@@ -8,6 +8,11 @@ MIT-licensed Kanban for OpenClaw workflows.
 3. `npm run dev`
 4. Open `http://localhost:5173`
 
+Environment variables:
+- `PORT` (default `3001`)
+- `KANBAN_DB_PATH` (optional absolute SQLite file path; defaults to `server/kanban.db`)
+- `OPENCLAW_WORKFLOW_HOOK_URL` (optional webhook endpoint)
+
 ## Validation
 - `npm test`
 - `npm run build`
