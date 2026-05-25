@@ -8,8 +8,21 @@ MIT-licensed Kanban for OpenClaw workflows.
 - Local persistence (SQLite)
 - Basic activity log for agent actions
 
+## Phase 2 delivered
+- Inline card editing for title, description, owner, tags, and lane
+- Optimistic UI updates for edit/move/delete actions with rollback on failure
+- SQLite startup migration guardrails for legacy card schemas
+- OpenClaw workflow webhooks on card create/update/move/delete via `OPENCLAW_WORKFLOW_HOOK_URL`
+
 ## Development plan
 1. Scaffold web app + API
 2. Add board and card model
 3. Add OpenClaw-oriented workflow hooks
 4. Add tests and release docs
+
+## Workflow hook payload
+Set `OPENCLAW_WORKFLOW_HOOK_URL` on the server to receive JSON events:
+- `card.created`
+- `card.updated`
+- `card.moved`
+- `card.deleted`

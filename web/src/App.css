@@ -35,6 +35,9 @@ header p {
 }
 
 .new-card input,
+.card input,
+.card textarea,
+.card select,
 .new-card button,
 .actions button {
   border: 1px solid #295143;
@@ -42,6 +45,12 @@ header p {
   padding: 0.6rem 0.7rem;
   background: #17372e;
   color: #f6f1e9;
+}
+
+.card textarea {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
 }
 
 .new-card button,
