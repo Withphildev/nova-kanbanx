@@ -45,7 +45,7 @@ export const app = express()
 app.use(cors())
 app.use(express.json())
 
-const lanes = ['Triage', 'Backlog', 'In Progress', 'Blocked', 'Done'] as const
+const lanes = ['TRIAGE', 'TODO', 'READY', 'RUNNING', 'BLOCKED', 'DONE'] as const
 
 type Lane = (typeof lanes)[number]
 
@@ -100,6 +100,15 @@ const runMigration = () => {
   if (!cardColumns.includes('tags')) {
     db.exec("ALTER TABLE cards ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
   }
+
+  // Normalize legacy lane names into the current lane set.
+  db.exec(`
+    UPDATE cards SET lane = 'TODO' WHERE lane IN ('Backlog', 'TODO');
+    UPDATE cards SET lane = 'RUNNING' WHERE lane IN ('In Progress', 'RUNNING');
+    UPDATE cards SET lane = 'BLOCKED' WHERE lane IN ('Blocked', 'BLOCKED');
+    UPDATE cards SET lane = 'DONE' WHERE lane IN ('Done', 'DONE');
+    UPDATE cards SET lane = 'TRIAGE' WHERE lane IN ('Triage', 'TRIAGE');
+  `)
 }
 
 runMigration()
@@ -181,7 +190,7 @@ app.post('/api/cards', async (req, res) => {
     return res.status(400).json({ error: 'title is required' })
   }
 
-  const lane = body.lane && lanes.includes(body.lane) ? body.lane : 'Triage'
+  const lane = body.lane && lanes.includes(body.lane) ? body.lane : 'TRIAGE'
   const now = new Date().toISOString()
   const tags = (body.tags ?? []).map((t) => t.trim()).filter(Boolean).join(',')
 

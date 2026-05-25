@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import './App.css'
 
-type Lane = 'Triage' | 'Backlog' | 'In Progress' | 'Blocked' | 'Done'
+type Lane = 'TRIAGE' | 'TODO' | 'READY' | 'RUNNING' | 'BLOCKED' | 'DONE'
 
 type Card = {
   id: number
@@ -23,7 +23,7 @@ type EditDraft = {
   lane: Lane
 }
 
-const laneOrder: Lane[] = ['Triage', 'Backlog', 'In Progress', 'Blocked', 'Done']
+const laneOrder: Lane[] = ['TRIAGE', 'TODO', 'READY', 'RUNNING', 'BLOCKED', 'DONE']
 
 function App() {
   const [cards, setCards] = useState<Card[]>([])

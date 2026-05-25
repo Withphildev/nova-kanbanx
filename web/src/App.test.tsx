@@ -6,7 +6,7 @@ type MockCard = {
   id: number
   title: string
   description: string
-  lane: 'Triage' | 'Backlog' | 'In Progress' | 'Blocked' | 'Done'
+  lane: 'TRIAGE' | 'TODO' | 'READY' | 'RUNNING' | 'BLOCKED' | 'DONE'
   owner: string
   tags: string[]
   createdAt: string
@@ -17,7 +17,7 @@ const sampleCard: MockCard = {
   id: 1,
   title: 'Card A',
   description: '',
-  lane: 'Triage',
+  lane: 'TRIAGE',
   owner: '',
   tags: [],
   createdAt: new Date().toISOString(),
@@ -45,7 +45,7 @@ describe('App optimistic behavior', () => {
 
     const card = screen.getByText('Card A').closest('.card')
     expect(card).not.toBeNull()
-    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'In Progress' }))
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'RUNNING' }))
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/cards/1', expect.any(Object))

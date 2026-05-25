@@ -24,7 +24,7 @@ Environment variables:
 - No silent malformed-DB recreation path is used.
 
 ## Phase 1 goals
-- Kanban board with lanes (`Triage`, `Backlog`, `In Progress`, `Blocked`, `Done`)
+- Kanban board with lanes (`TRIAGE`, `TODO`, `READY`, `RUNNING`, `BLOCKED`, `DONE`)
 - Card CRUD with lightweight tags and owner
 - Local persistence (SQLite)
 - Basic activity log for agent actions

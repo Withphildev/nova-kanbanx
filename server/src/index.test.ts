@@ -48,7 +48,7 @@ describe('workflow hooks', () => {
 
     expect(payload.event).toBe('card.created')
     expect(payload.cardId).toBeTypeOf('number')
-    expect(payload.lane).toBe('Triage')
+    expect(payload.lane).toBe('TRIAGE')
   })
 
   it('deletes card successfully', async () => {
