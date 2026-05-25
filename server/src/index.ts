@@ -6,7 +6,7 @@ const PORT = Number(process.env.PORT ?? 3001)
 const db = new Database('kanban.db')
 const workflowHookUrl = process.env.OPENCLAW_WORKFLOW_HOOK_URL?.trim()
 
-const app = express()
+export const app = express()
 app.use(cors())
 app.use(express.json())
 
@@ -231,6 +231,8 @@ app.get('/api/activity', (_req, res) => {
   res.json({ activity: rows })
 })
 
-app.listen(PORT, () => {
-  console.log(`openclaw-kanban api listening on http://localhost:${PORT}`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`openclaw-kanban api listening on http://localhost:${PORT}`)
+  })
+}
