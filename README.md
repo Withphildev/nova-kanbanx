@@ -16,6 +16,7 @@ Environment variables:
 ## Validation
 - `npm test`
 - `npm run build`
+- `npm run agent:smoke` (requires API running on `http://localhost:3001` or set `KANBAN_API_URL`)
 
 ## DB integrity guard
 - Server runs `PRAGMA integrity_check` during startup and on `GET /api/health`.
