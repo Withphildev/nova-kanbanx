@@ -1,7 +1,15 @@
 :root {
-  font-family: 'Space Grotesk', 'Avenir Next', sans-serif;
-  color: #f6f1e9;
-  background: radial-gradient(circle at top left, #2d5a45, #102923 45%, #0a1613);
+  --bg: #090d12;
+  --panel: #121922;
+  --panel-soft: #182332;
+  --line: #253249;
+  --text: #e6edf8;
+  --muted: #8fa1bc;
+  --accent: #7fb3ff;
+  --danger: #f36d7d;
+  font-family: 'Sora', 'Avenir Next', sans-serif;
+  color: var(--text);
+  background: radial-gradient(1200px 500px at 15% 0%, #1a2640 0%, var(--bg) 55%);
 }
 
 * {
@@ -14,43 +22,87 @@ body {
 
 .app-shell {
   min-height: 100vh;
-  padding: 1.25rem;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.2rem;
 }
 
-header h1 {
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.topbar h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.7rem;
 }
 
-header p {
-  margin-top: 0.25rem;
-  opacity: 0.85;
+.topbar p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
 }
 
-.new-card {
-  display: grid;
+.board-stats {
+  display: flex;
   gap: 0.5rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 1rem 0 1.25rem;
 }
 
+.board-stats span {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.controls input,
 .new-card input,
 .card input,
 .card textarea,
 .card select,
 .new-card button,
+.lane-pills button,
 .actions button {
-  border: 1px solid #295143;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 0.6rem 0.7rem;
-  background: #17372e;
-  color: #f6f1e9;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.58rem 0.68rem;
 }
 
-.card textarea {
-  width: 100%;
-  min-height: 5rem;
-  resize: vertical;
+.lane-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.lane-pills button {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.lane-pills button.active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: #1a2740;
+}
+
+.new-card {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
 }
 
 .new-card button,
@@ -60,33 +112,50 @@ header p {
 
 .board {
   display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+  gap: 0.7rem;
+  align-items: start;
 }
 
 .lane {
-  background: rgba(12, 33, 28, 0.92);
-  border: 1px solid #295143;
+  border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 0.75rem;
+  background: linear-gradient(180deg, var(--panel-soft), #121a25 35%);
+  padding: 0.7rem;
 }
 
-.lane h2 {
+.lane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.lane-header h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.lane-header span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .stack {
   display: grid;
   gap: 0.6rem;
-  margin-top: 0.65rem;
 }
 
 .card {
-  background: #102923;
-  border: 1px solid #315c4c;
-  border-radius: 12px;
-  padding: 0.65rem;
+  border: 1px solid #2b3b55;
+  border-radius: 11px;
+  background: #0f1622;
+  padding: 0.62rem;
 }
 
 .card h3 {
@@ -94,41 +163,87 @@ header p {
   font-size: 0.95rem;
 }
 
-.owner,
-.tags {
-  opacity: 0.82;
+.card p {
+  margin: 0.45rem 0;
+  color: #bfd0e9;
   font-size: 0.86rem;
 }
 
-.actions {
+.meta {
+  margin-top: 0.45rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.owner {
+  color: #9ec9ff;
+}
+
+.tags {
+  margin-top: 0.55rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.32rem;
+}
+
+.tags span {
+  border: 1px solid #2d4363;
+  color: #a7c4ef;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.actions {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
 }
 
 .actions button {
-  padding: 0.4rem 0.55rem;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.52rem;
 }
 
 .actions .danger {
-  background: #542a2d;
-  border-color: #754046;
+  border-color: #614055;
+  color: #ffc3cb;
 }
 
-@media (max-width: 1024px) {
-  .new-card {
-    grid-template-columns: 1fr 1fr;
-  }
+.card textarea {
+  width: 100%;
+  min-height: 5rem;
+  resize: vertical;
+}
 
+.loading {
+  color: var(--muted);
+}
+
+@media (max-width: 1200px) {
   .board {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
-  .new-card,
+@media (max-width: 720px) {
+  .new-card {
+    grid-template-columns: 1fr;
+  }
+
   .board {
     grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
   }
 }

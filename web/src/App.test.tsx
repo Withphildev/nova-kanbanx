@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
@@ -42,7 +42,9 @@ describe('App optimistic behavior', () => {
 
     await screen.findByText('Card A')
 
-    fireEvent.click(screen.getByRole('button', { name: 'In Progress' }))
+    const card = screen.getByText('Card A').closest('.card')
+    expect(card).not.toBeNull()
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'In Progress' }))
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/cards/1', expect.any(Object))

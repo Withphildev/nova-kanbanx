@@ -33,10 +33,23 @@ function App() {
   const [tags, setTags] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [draft, setDraft] = useState<EditDraft | null>(null)
+  const [query, setQuery] = useState('')
+  const [laneFilter, setLaneFilter] = useState<'All' | Lane>('All')
+
+  const filteredCards = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return cards.filter((card) => {
+      if (laneFilter !== 'All' && card.lane !== laneFilter) return false
+      if (!q) return true
+
+      const text = [card.title, card.description, card.owner, card.tags.join(' ')].join(' ').toLowerCase()
+      return text.includes(q)
+    })
+  }, [cards, laneFilter, query])
 
   const grouped = useMemo(() => {
-    return laneOrder.map((lane) => ({ lane, cards: cards.filter((c) => c.lane === lane) }))
-  }, [cards])
+    return laneOrder.map((lane) => ({ lane, cards: filteredCards.filter((c) => c.lane === lane) }))
+  }, [filteredCards])
 
   const loadCards = async () => {
     setLoading(true)
@@ -173,10 +186,43 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header>
-        <h1>OpenClaw Kanban</h1>
-        <p>MIT clean-room board for agent and project flow.</p>
+      <header className="topbar">
+        <div>
+          <h1>OpenClaw Kanban</h1>
+          <p>Durable workboard for agents, handoffs, and human checkpoints.</p>
+        </div>
+        <div className="board-stats">
+          <span>{cards.length} total</span>
+          <span>{filteredCards.length} visible</span>
+        </div>
       </header>
+
+      <section className="controls">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search title, owner, tags, description"
+        />
+        <div className="lane-pills">
+          <button
+            type="button"
+            className={laneFilter === 'All' ? 'active' : ''}
+            onClick={() => setLaneFilter('All')}
+          >
+            All
+          </button>
+          {laneOrder.map((lane) => (
+            <button
+              key={lane}
+              type="button"
+              className={laneFilter === lane ? 'active' : ''}
+              onClick={() => setLaneFilter(lane)}
+            >
+              {lane}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <form className="new-card" onSubmit={createCard}>
         <input
@@ -188,23 +234,26 @@ function App() {
         <input
           value={owner}
           onChange={(e) => setOwner(e.target.value)}
-          placeholder="Owner (optional)"
+          placeholder="Owner"
         />
         <input
           value={tags}
           onChange={(e) => setTags(e.target.value)}
           placeholder="tags,comma,separated"
         />
-        <button type="submit">Add card</button>
+        <button type="submit">Create card</button>
       </form>
 
       {loading ? (
-        <p>Loading...</p>
+        <p className="loading">Loading board...</p>
       ) : (
         <section className="board">
           {grouped.map((column) => (
             <article key={column.lane} className="lane">
-              <h2>{column.lane}</h2>
+              <div className="lane-header">
+                <h2>{column.lane}</h2>
+                <span>{column.cards.length}</span>
+              </div>
               <div className="stack">
                 {column.cards.map((card) => {
                   const isEditing = editingId === card.id && draft
@@ -254,9 +303,18 @@ function App() {
                       ) : (
                         <>
                           <h3>{card.title}</h3>
-                          {card.owner && <p className="owner">Owner: {card.owner}</p>}
+                          <div className="meta">
+                            {card.owner ? <span className="owner">{card.owner}</span> : <span>Unassigned</span>}
+                            <span>{new Date(card.updatedAt).toLocaleDateString()}</span>
+                          </div>
                           {card.description && <p>{card.description}</p>}
-                          <p className="tags">{card.tags.join(' · ')}</p>
+                          {card.tags.length > 0 && (
+                            <div className="tags">
+                              {card.tags.map((tag) => (
+                                <span key={tag}>{tag}</span>
+                              ))}
+                            </div>
+                          )}
                           <div className="actions">
                             <button type="button" onClick={() => startEdit(card)}>
                               Edit
