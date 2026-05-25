@@ -1,0 +1,125 @@
+:root {
+  font-family: 'Space Grotesk', 'Avenir Next', sans-serif;
+  color: #f6f1e9;
+  background: radial-gradient(circle at top left, #2d5a45, #102923 45%, #0a1613);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 1.25rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+header p {
+  margin-top: 0.25rem;
+  opacity: 0.85;
+}
+
+.new-card {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1rem 0 1.25rem;
+}
+
+.new-card input,
+.new-card button,
+.actions button {
+  border: 1px solid #295143;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #17372e;
+  color: #f6f1e9;
+}
+
+.new-card button,
+.actions button {
+  cursor: pointer;
+}
+
+.board {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.lane {
+  background: rgba(12, 33, 28, 0.92);
+  border: 1px solid #295143;
+  border-radius: 14px;
+  padding: 0.75rem;
+}
+
+.lane h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.65rem;
+}
+
+.card {
+  background: #102923;
+  border: 1px solid #315c4c;
+  border-radius: 12px;
+  padding: 0.65rem;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.owner,
+.tags {
+  opacity: 0.82;
+  font-size: 0.86rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.actions button {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.actions .danger {
+  background: #542a2d;
+  border-color: #754046;
+}
+
+@media (max-width: 1024px) {
+  .new-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .board {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .new-card,
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
