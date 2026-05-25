@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
@@ -25,6 +25,7 @@ const sampleCard: MockCard = {
 }
 
 afterEach(() => {
+  cleanup()
   vi.restoreAllMocks()
 })
 
@@ -55,5 +56,35 @@ describe('App optimistic behavior', () => {
     })
 
     expect(await screen.findByText('Card A')).toBeInTheDocument()
+  })
+
+  it('deletes a card and reloads from API', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ cards: [sampleCard] }) })
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ cards: [] }) })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await screen.findByText('Card A')
+
+    const card = screen.getByText('Card A').closest('.card')
+    expect(card).not.toBeNull()
+
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cards/1', { method: 'DELETE' })
+    })
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cards')
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Card A')).not.toBeInTheDocument()
+    })
   })
 })

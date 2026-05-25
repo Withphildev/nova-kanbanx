@@ -35,6 +35,7 @@ function App() {
   const [draft, setDraft] = useState<EditDraft | null>(null)
   const [query, setQuery] = useState('')
   const [laneFilter, setLaneFilter] = useState<'All' | Lane>('All')
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<number[]>([])
 
   const filteredCards = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -171,16 +172,19 @@ function App() {
     }
   }
 
-  const deleteCard = async (id: number) => {
-    const prevCards = cards
-    setCards((current) => current.filter((card) => card.id !== id))
+  const deleteCard = async (card: Card) => {
+    setPendingDeleteIds((current) => [...current, card.id])
+    setCards((current) => current.filter((c) => c.id !== card.id))
 
     try {
-      const res = await fetch(`/api/cards/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/cards/${card.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete card')
-    } catch {
-      setCards(prevCards)
       await loadCards()
+    } catch {
+      setCards((current) => [card, ...current.filter((c) => c.id !== card.id)])
+      await loadCards()
+    } finally {
+      setPendingDeleteIds((current) => current.filter((id) => id !== card.id))
     }
   }
 
@@ -329,7 +333,12 @@ function App() {
                                 {lane}
                               </button>
                             ))}
-                            <button type="button" className="danger" onClick={() => deleteCard(card.id)}>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() => deleteCard(card)}
+                              disabled={pendingDeleteIds.includes(card.id)}
+                            >
                               Delete
                             </button>
                           </div>
