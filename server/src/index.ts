@@ -1,6 +1,8 @@
 import cors from 'cors'
 import Database from 'better-sqlite3'
 import express from 'express'
+import { cpSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT ?? 3001)
@@ -8,6 +10,36 @@ const dbPath = process.env.KANBAN_DB_PATH?.trim() || fileURLToPath(new URL('../k
 const db = new Database(dbPath)
 db.pragma('foreign_keys = ON')
 const workflowHookUrl = process.env.OPENCLAW_WORKFLOW_HOOK_URL?.trim()
+
+const quarantineMalformedDb = (targetPath: string, reason: string) => {
+  const quarantineDir = path.join(path.dirname(targetPath), 'quarantine')
+  mkdirSync(quarantineDir, { recursive: true })
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const base = path.basename(targetPath)
+  const quarantinePath = path.join(quarantineDir, `${base}.${timestamp}.malformed.sqlite`)
+  cpSync(targetPath, quarantinePath)
+  throw new Error(
+    `SQLite integrity check failed (${reason}). Quarantined copy: ${quarantinePath}. Refusing to continue.`,
+  )
+}
+
+const runIntegrityCheck = () => {
+  if (!existsSync(dbPath)) {
+    return { ok: true as const, detail: 'new database path (file not created yet)' }
+  }
+
+  if (statSync(dbPath).size === 0) {
+    return { ok: true as const, detail: 'empty database file' }
+  }
+
+  const rows = db.pragma('integrity_check') as Array<{ integrity_check: string }> | string[]
+  const values = rows.map((row) => (typeof row === 'string' ? row : String(row.integrity_check ?? '')))
+  const failed = values.some((value) => value.toLowerCase() !== 'ok')
+  if (failed) {
+    quarantineMalformedDb(dbPath, values.join('; '))
+  }
+  return { ok: true as const, detail: values[0] ?? 'ok' }
+}
 
 export const app = express()
 app.use(cors())
@@ -71,6 +103,7 @@ const runMigration = () => {
 }
 
 runMigration()
+const startupIntegrity = runIntegrityCheck()
 
 const cardRowToJson = (row: CardRow) => ({
   id: row.id,
@@ -117,7 +150,13 @@ const emitWorkflowHook = async (event: {
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'openclaw-kanban-api' })
+  try {
+    const integrity = runIntegrityCheck()
+    res.json({ ok: true, service: 'openclaw-kanban-api', dbIntegrity: integrity })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    res.status(500).json({ ok: false, service: 'openclaw-kanban-api', dbIntegrity: { ok: false, detail: message } })
+  }
 })
 
 app.get('/api/lanes', (_req, res) => {
@@ -248,6 +287,7 @@ app.get('/api/activity', (_req, res) => {
 })
 
 if (process.env.NODE_ENV !== 'test') {
+  console.log(`db integrity check: ${startupIntegrity.detail}`)
   app.listen(PORT, () => {
     console.log(`openclaw-kanban api listening on http://localhost:${PORT}`)
   })

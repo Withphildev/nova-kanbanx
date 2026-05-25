@@ -17,6 +17,11 @@ Environment variables:
 - `npm test`
 - `npm run build`
 
+## DB integrity guard
+- Server runs `PRAGMA integrity_check` during startup and on `GET /api/health`.
+- If an existing DB file is malformed, server copies it to `server/quarantine/*.malformed.sqlite` and refuses to start.
+- No silent malformed-DB recreation path is used.
+
 ## Phase 1 goals
 - Kanban board with lanes (`Backlog`, `In Progress`, `Blocked`, `Done`)
 - Card CRUD with lightweight tags and owner

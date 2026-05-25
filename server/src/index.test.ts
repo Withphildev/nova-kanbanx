@@ -15,6 +15,16 @@ afterEach(async () => {
 })
 
 describe('workflow hooks', () => {
+  it('reports db integrity on health endpoint', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    const mod = await import('./index.js')
+
+    const healthRes = await request(mod.app).get('/api/health')
+    expect(healthRes.status).toBe(200)
+    expect(healthRes.body.ok).toBe(true)
+    expect(healthRes.body.dbIntegrity.ok).toBe(true)
+  })
+
   it('emits card.created webhook when configured', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true })
     global.fetch = fetchMock as unknown as typeof fetch
