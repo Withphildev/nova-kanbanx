@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const PORT = Number(process.env.PORT ?? 3001)
 const dbPath = process.env.KANBAN_DB_PATH?.trim() || fileURLToPath(new URL('../kanban.db', import.meta.url))
 const db = new Database(dbPath)
+db.pragma('foreign_keys = ON')
 const workflowHookUrl = process.env.OPENCLAW_WORKFLOW_HOOK_URL?.trim()
 
 export const app = express()
@@ -223,13 +224,19 @@ app.delete('/api/cards/:id', async (req, res) => {
     return res.status(400).json({ error: 'invalid id' })
   }
 
-  const now = new Date().toISOString()
-  const result = db.prepare('DELETE FROM cards WHERE id = ?').run(id)
-  if (!result.changes) {
+  const existing = db.prepare('SELECT id FROM cards WHERE id = ?').get(id) as { id: number } | undefined
+  if (!existing) {
     return res.status(404).json({ error: 'card not found' })
   }
 
-  logActivity.run(id, 'card.deleted', '', now)
+  const now = new Date().toISOString()
+  const removeCard = db.transaction((cardId: number) => {
+    db.prepare('DELETE FROM activity_log WHERE card_id = ?').run(cardId)
+    db.prepare('DELETE FROM cards WHERE id = ?').run(cardId)
+  })
+
+  removeCard(id)
+  logActivity.run(null, 'card.deleted', `card:${id}`, now)
   void emitWorkflowHook({ event: 'card.deleted', cardId: id })
 
   return res.status(204).send()

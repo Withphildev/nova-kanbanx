@@ -40,4 +40,20 @@ describe('workflow hooks', () => {
     expect(payload.cardId).toBeTypeOf('number')
     expect(payload.lane).toBe('Backlog')
   })
+
+  it('deletes card successfully', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    const mod = await import('./index.js')
+
+    const createRes = await request(mod.app).post('/api/cards').send({ title: 'Delete me' })
+    expect(createRes.status).toBe(201)
+    const id = createRes.body.card.id as number
+
+    const deleteRes = await request(mod.app).delete(`/api/cards/${id}`)
+    expect(deleteRes.status).toBe(204)
+
+    const cardsRes = await request(mod.app).get('/api/cards')
+    expect(cardsRes.status).toBe(200)
+    expect((cardsRes.body.cards as Array<{ id: number }>).some((c) => c.id === id)).toBe(false)
+  })
 })
