@@ -95,14 +95,21 @@ const emitWorkflowHook = async (event: {
   if (!workflowHookUrl) return
 
   try {
-    await fetch(workflowHookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...event,
-        timestamp: new Date().toISOString(),
-      }),
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 1500)
+    try {
+      await fetch(workflowHookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          ...event,
+          timestamp: new Date().toISOString(),
+        }),
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
   } catch (error) {
     console.error('workflow hook emit failed', error)
   }
@@ -154,7 +161,7 @@ app.post('/api/cards', async (req, res) => {
     )
 
   logActivity.run(result.lastInsertRowid, 'card.created', body.title.trim(), now)
-  await emitWorkflowHook({ event: 'card.created', cardId: Number(result.lastInsertRowid), lane })
+  void emitWorkflowHook({ event: 'card.created', cardId: Number(result.lastInsertRowid), lane })
 
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(result.lastInsertRowid) as CardRow
 
@@ -198,7 +205,7 @@ app.patch('/api/cards/:id', async (req, res) => {
   const detail = wasMoved ? `${existing.lane} -> ${nextLane}` : 'fields updated'
   logActivity.run(id, wasMoved ? 'card.moved' : 'card.updated', detail, now)
 
-  await emitWorkflowHook({
+  void emitWorkflowHook({
     event: wasMoved ? 'card.moved' : 'card.updated',
     cardId: id,
     detail,
@@ -223,7 +230,7 @@ app.delete('/api/cards/:id', async (req, res) => {
   }
 
   logActivity.run(id, 'card.deleted', '', now)
-  await emitWorkflowHook({ event: 'card.deleted', cardId: id })
+  void emitWorkflowHook({ event: 'card.deleted', cardId: id })
 
   return res.status(204).send()
 })
