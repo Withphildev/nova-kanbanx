@@ -179,12 +179,17 @@ function App() {
     try {
       const res = await fetch(`/api/cards/${card.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete card')
-      await loadCards()
     } catch {
       setCards((current) => [card, ...current.filter((c) => c.id !== card.id)])
-      await loadCards()
+      return
     } finally {
       setPendingDeleteIds((current) => current.filter((id) => id !== card.id))
+    }
+
+    try {
+      await loadCards()
+    } catch {
+      // Delete already succeeded; keep optimistic removal even if refresh fails.
     }
   }
 

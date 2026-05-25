@@ -87,4 +87,30 @@ describe('App optimistic behavior', () => {
       expect(screen.queryByText('Card A')).not.toBeInTheDocument()
     })
   })
+
+  it('keeps card deleted when refresh fails after successful delete', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ cards: [sampleCard] }) })
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValueOnce(new Error('refresh failed'))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await screen.findByText('Card A')
+
+    const card = screen.getByText('Card A').closest('.card')
+    expect(card).not.toBeNull()
+
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/api/cards/1', { method: 'DELETE' })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Card A')).not.toBeInTheDocument()
+    })
+  })
 })
