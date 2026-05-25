@@ -6,7 +6,7 @@ type MockCard = {
   id: number
   title: string
   description: string
-  lane: 'Backlog' | 'In Progress' | 'Blocked' | 'Done'
+  lane: 'Triage' | 'Backlog' | 'In Progress' | 'Blocked' | 'Done'
   owner: string
   tags: string[]
   createdAt: string
@@ -17,7 +17,7 @@ const sampleCard: MockCard = {
   id: 1,
   title: 'Card A',
   description: '',
-  lane: 'Backlog',
+  lane: 'Triage',
   owner: '',
   tags: [],
   createdAt: new Date().toISOString(),

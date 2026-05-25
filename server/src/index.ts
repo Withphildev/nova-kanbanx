@@ -45,7 +45,7 @@ export const app = express()
 app.use(cors())
 app.use(express.json())
 
-const lanes = ['Backlog', 'In Progress', 'Blocked', 'Done'] as const
+const lanes = ['Triage', 'Backlog', 'In Progress', 'Blocked', 'Done'] as const
 
 type Lane = (typeof lanes)[number]
 
@@ -181,7 +181,7 @@ app.post('/api/cards', async (req, res) => {
     return res.status(400).json({ error: 'title is required' })
   }
 
-  const lane = body.lane && lanes.includes(body.lane) ? body.lane : 'Backlog'
+  const lane = body.lane && lanes.includes(body.lane) ? body.lane : 'Triage'
   const now = new Date().toISOString()
   const tags = (body.tags ?? []).map((t) => t.trim()).filter(Boolean).join(',')
 
