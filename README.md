@@ -2,6 +2,16 @@
 
 MIT-licensed Kanban for OpenClaw workflows.
 
+## Quick start
+1. `cp .env.example .env`
+2. `npm install`
+3. `npm run dev`
+4. Open `http://localhost:5173`
+
+## Validation
+- `npm test`
+- `npm run build`
+
 ## Phase 1 goals
 - Kanban board with lanes (`Backlog`, `In Progress`, `Blocked`, `Done`)
 - Card CRUD with lightweight tags and owner
@@ -26,3 +36,10 @@ Set `OPENCLAW_WORKFLOW_HOOK_URL` on the server to receive JSON events:
 - `card.updated`
 - `card.moved`
 - `card.deleted`
+
+Payload shape:
+- `event` (string)
+- `cardId` (number)
+- `lane` (optional string)
+- `detail` (optional string)
+- `timestamp` (ISO string)

@@ -10,6 +10,9 @@
     "dev": "npm-run-all --parallel dev:server dev:web",
     "dev:server": "npm --workspace server run dev",
     "dev:web": "npm --workspace web run dev",
+    "test": "npm-run-all test:server test:web",
+    "test:server": "npm --workspace server run test",
+    "test:web": "npm --workspace web run test",
     "build": "npm-run-all build:server build:web",
     "build:server": "npm --workspace server run build",
     "build:web": "npm --workspace web run build"
