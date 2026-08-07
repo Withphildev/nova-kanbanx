@@ -1,7 +1,7 @@
 {
-  "name": "server",
+  "name": "nova-kanbanx-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Nova KanbanX API and LoopX control-plane adapter",
   "main": "index.js",
   "scripts": {
     "test": "NODE_ENV=test KANBAN_DB_PATH=:memory: vitest run",
@@ -10,8 +10,8 @@
     "start": "node dist/index.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Withphildev",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "better-sqlite3": "^12.10.0",

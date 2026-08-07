@@ -33,27 +33,18 @@ const run = async () => {
     throw new Error('create failed: missing card id')
   }
 
-  await requestJson(
-    `/api/cards/${cardId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lane: 'In Progress' }),
-    },
-    200,
-    'move to In Progress',
-  )
-
-  await requestJson(
-    `/api/cards/${cardId}`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lane: 'Done' }),
-    },
-    200,
-    'move to Done',
-  )
+  for (const lane of ['TODO', 'READY', 'RUNNING', 'DONE']) {
+    await requestJson(
+      `/api/cards/${cardId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lane, eventId: `smoke-${cardId}-${lane.toLowerCase()}` }),
+      },
+      200,
+      `move to ${lane}`,
+    )
+  }
 
   await requestJson(`/api/cards/${cardId}`, { method: 'DELETE' }, 204, 'delete')
 
