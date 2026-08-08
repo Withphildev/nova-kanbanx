@@ -444,15 +444,22 @@ const reconcileLoopx = async (execute: boolean) => {
   }
 }
 
-const validDate = (value: unknown) =>
-  value === null ||
-  (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value)))
-
 const validInstant = (value: unknown) =>
   value === null ||
   (typeof value === 'string' &&
     /(?:Z|[+-]\d{2}:\d{2})$/i.test(value.trim()) &&
     !Number.isNaN(Date.parse(value)))
+
+const validDate = (value: unknown) => {
+  if (value === null) return true
+  if (typeof value !== 'string') return false
+  const normalized = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const parsed = new Date(`${normalized}T00:00:00.000Z`)
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(normalized)
+  }
+  return validInstant(normalized)
+}
 
 const validTimezone = (value: unknown) => {
   if (typeof value !== 'string' || !value.trim()) return false
@@ -462,6 +469,22 @@ const validTimezone = (value: unknown) => {
   } catch {
     return false
   }
+}
+
+const requireExpectedRevision = (
+  res: express.Response,
+  value: unknown,
+  currentRevision: number,
+) => {
+  if (!Number.isInteger(value)) {
+    res.status(400).json({ error: 'expectedRevision is required and must be an integer' })
+    return false
+  }
+  if (value !== currentRevision) {
+    res.status(409).json({ error: 'revision conflict', currentRevision })
+    return false
+  }
+  return true
 }
 
 const localDateKey = (instant: string | Date, timezone: string) => {
@@ -1418,9 +1441,7 @@ app.post('/api/cards/:id/promote', (req, res) => {
   }
   if (existing.item_type !== 'TASK') return res.status(409).json({ error: 'only a task can become a project' })
   if (existing.lane === 'DONE') return res.status(409).json({ error: 'reopen a completed task before promoting it' })
-  if (!Number.isInteger(body.expectedRevision) || body.expectedRevision !== existing.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: existing.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, existing.revision)) return
 
   const now = new Date().toISOString()
   const updated = db.transaction(() => {
@@ -1498,9 +1519,7 @@ app.post('/api/cards/:id/decompose', (req, res) => {
     plan: normalized.milestones,
   }
   if (body.execute !== true) return res.json(responseBase)
-  if (!Number.isInteger(body.expectedRevision) || body.expectedRevision !== project.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: project.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, project.revision)) return
 
   const now = new Date().toISOString()
   const createdCardIds: number[] = []
@@ -1656,7 +1675,9 @@ const createCard = async (req: express.Request, res: express.Response) => {
     return res.status(400).json({ error: 'invalid recurrenceEndAt; use an ISO instant with an offset' })
   }
   if (body.dueAt !== undefined && !validDate(body.dueAt)) {
-    return res.status(400).json({ error: 'invalid dueAt' })
+    return res.status(400).json({
+      error: 'invalid dueAt; use YYYY-MM-DD or an ISO instant with an offset',
+    })
   }
   if (body.itemType !== undefined && !itemTypes.includes(body.itemType)) {
     return res.status(400).json({ error: 'invalid itemType' })
@@ -1855,9 +1876,7 @@ app.post('/api/cards/:id/snooze', (req, res) => {
     res.set('Idempotent-Replay', 'true')
     return res.json({ card: cardRowToJson(card), eventId, idempotentReplay: true })
   }
-  if (body.expectedRevision !== undefined && body.expectedRevision !== existing.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: existing.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, existing.revision)) return
 
   const now = new Date().toISOString()
   const updated = db.transaction(() => {
@@ -1914,9 +1933,7 @@ app.post('/api/cards/:id/reminders/acknowledge', (req, res) => {
   if (existing.reminder_status !== 'PENDING' && existing.reminder_status !== 'DELIVERED') {
     return res.status(409).json({ error: 'reminder is not awaiting acknowledgement' })
   }
-  if (!Number.isInteger(body.expectedRevision) || body.expectedRevision !== existing.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: existing.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, existing.revision)) return
 
   const now = new Date().toISOString()
   let nextRemindAt: string | null = null
@@ -2056,7 +2073,9 @@ app.patch('/api/cards/:id', async (req, res) => {
     return res.status(400).json({ error: 'invalid recurrenceEndAt; use an ISO instant with an offset' })
   }
   if (body.dueAt !== undefined && !validDate(body.dueAt)) {
-    return res.status(400).json({ error: 'invalid dueAt' })
+    return res.status(400).json({
+      error: 'invalid dueAt; use YYYY-MM-DD or an ISO instant with an offset',
+    })
   }
   if (body.estimateMinutes !== undefined && !validNonNegativeInteger(body.estimateMinutes)) {
     return res.status(400).json({ error: 'invalid estimateMinutes' })
@@ -2087,9 +2106,7 @@ app.patch('/api/cards/:id', async (req, res) => {
     return res.json({ card: cardRowToJson(card), eventId, idempotentReplay: true })
   }
 
-  if (body.expectedRevision !== undefined && body.expectedRevision !== existing.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: existing.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, existing.revision)) return
 
   const nextLane = body.lane ?? existing.lane
   const invalidTransition = transitionError(existing.lane, nextLane)
@@ -2279,9 +2296,7 @@ app.post('/api/cards/:id/checklist', (req, res) => {
     res.set('Idempotent-Replay', 'true')
     return res.json({ structure: structureForCard(card), eventId, idempotentReplay: true })
   }
-  if (body.expectedRevision !== undefined && body.expectedRevision !== card.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: card.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, card.revision)) return
 
   const now = new Date().toISOString()
   const defaultPosition = (
@@ -2357,9 +2372,7 @@ app.patch('/api/checklist-items/:id', (req, res) => {
     res.set('Idempotent-Replay', 'true')
     return res.json({ item: checklistRowToJson(current), eventId, idempotentReplay: true })
   }
-  if (body.expectedRevision !== undefined && body.expectedRevision !== item.revision) {
-    return res.status(409).json({ error: 'revision conflict', currentRevision: item.revision })
-  }
+  if (!requireExpectedRevision(res, body.expectedRevision, item.revision)) return
 
   const now = new Date().toISOString()
   db.transaction(() => {

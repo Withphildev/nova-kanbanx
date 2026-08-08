@@ -51,9 +51,31 @@ Environment variables:
   with explicit backflow, blocking, and reopening routes exposed by `GET /api/lanes`.
 - Create, update, and delete requests accept an `Idempotency-Key` header or `eventId`
   body field. Replays return the original task identity without repeating side effects.
-- `expectedRevision` on updates provides optimistic concurrency protection.
+- Local card, snooze, promotion, decomposition, reminder acknowledgement, and checklist updates
+  require `expectedRevision`. Missing revisions return `400`; stale revisions return `409` with
+  the current revision so an agent can reload before deciding whether to retry.
 - `GET /api/cards/:id/events` exposes the append-only event ledger for a task.
 - Numbered, transactional SQLite migrations preserve and backfill legacy databases.
+
+### Date and time semantics
+
+- `dueAt` is planning information. It accepts either a calendar date (`YYYY-MM-DD`) or an ISO 8601
+  instant ending in `Z` or a numeric offset. Offset-less date-times are rejected because their
+  meaning changes with the machine timezone.
+- `remindAt`, `recurrenceEndAt`, and snooze times are delivery instants. They always require an ISO
+  8601 value with `Z` or a numeric offset plus an IANA timezone where the endpoint requests one.
+- Natural-language dates are interpreted conversationally by Nova and confirmed before the API
+  receives them; KanbanX never guesses phrases such as “later” or “next Friday.”
+
+### Audit model
+
+- `task_events` is the durable, append-only source of truth for task mutations and idempotency.
+  Events remain queryable by the former card ID after a card is deleted, including the final
+  `card.deleted` event.
+- `activity_log` is a compact recent-activity feed for the UI and operations. It is prunable, and
+  card-specific activity rows are removed with a deleted card; a detached deletion marker remains.
+- Checklist rows are task-owned materialized state and are deleted by foreign-key cascade. Their
+  already-recorded task events remain in the durable ledger.
 
 The board keeps its existing visual design while offering only valid lifecycle moves, surfacing API
 errors, and sending idempotency/revision guards.

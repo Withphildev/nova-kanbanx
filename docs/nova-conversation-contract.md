@@ -20,6 +20,10 @@ Content-Type: application/json
 The server creates a `TASK` in `TRIAGE`, preserves the original text, and marks its source as
 `nova`. Reuse the same `eventId` if a response is lost and the exact request must be retried.
 
+`dueAt` is planning information: send either a calendar date (`YYYY-MM-DD`) or an exact ISO instant
+with `Z` or a numeric offset. Never send an offset-less date-time. Reminder and snooze fields are
+delivery instants and always require an offset-bearing ISO value and their requested IANA timezone.
+
 ## Reminder interpretation
 
 KanbanX never guesses what a natural-language date means. Nova performs the conversational step:
@@ -132,4 +136,6 @@ execution poll during ordinary conversation.
 - Never create both a cron job and a KanbanX reminder for the same request unless Phil explicitly
   asks for two delivery mechanisms.
 - Never reuse an idempotency event id for a different action.
+- Always read and send the current `expectedRevision` for local mutations. Reload on `409`; do not
+  blindly retry a stale change.
 - Keep LoopX-managed cards read-only and separate from local notebook capture.
