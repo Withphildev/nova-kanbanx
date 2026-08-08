@@ -13,6 +13,9 @@ Environment variables:
 - `PORT` (default `3001`)
 - `KANBAN_DB_PATH` (optional absolute SQLite file path; defaults to `server/kanban.db`)
 - `OPENCLAW_WORKFLOW_HOOK_URL` (optional webhook endpoint)
+- `KANBAN_REMINDER_HOOK_URL` (optional reminder receiver; enables delivery polling)
+- `KANBAN_REMINDER_POLL_MS` (delivery poll interval, default `60000`, minimum `1000`)
+- `KANBAN_REMINDER_TIMEOUT_MS` (per-attempt webhook timeout, default `5000`)
 - `LOOPX_GOAL_ID` (enables the LoopX adapter for this goal)
 - `LOOPX_BIN` (LoopX executable, default `loopx`)
 - `LOOPX_REGISTRY` / `LOOPX_PROJECT` (optional explicit LoopX paths)
@@ -86,15 +89,85 @@ or `complete`. These calls also dry-run unless the body contains `"execute": tru
 - The complete durable task contract can be edited inline with optimistic concurrency protection.
 - Each task can load its append-only lifecycle event history directly from the board.
 
+## Assistant notebook and progressive work
+
+Nova KanbanX can act as Nova's durable notebook: quick thoughts become tasks instead of chat memory
+or one-off cron jobs, and larger goals can be broken into work that feels finishable.
+
+- Work is organized as `Project -> Milestone -> Task -> Checklist item`.
+- The board shows root projects and standalone tasks, preserving a calm top-level view.
+- Opening **Details** reveals the small-step tree and lets a user add milestones, tasks, or checklist
+  items without leaving the card.
+- Project and milestone progress rolls up from completed descendant tasks. Task progress rolls up
+  from checklist items.
+- **What next?** generates a restart packet with the current milestone, one preferred next action,
+  estimated time, definition of done, blockers, continuation notes, and recent wins.
+- Hierarchy and checklist mutations use the same event idempotency and optimistic revision guards as
+  the original durable card lifecycle.
+
+The product principles and delivery roadmap are documented in
+[`docs/assistant-notebook.md`](docs/assistant-notebook.md).
+
+### Conversational capture and reminders
+
+- `POST /api/capture` stores Nova's original captured text as a `TRIAGE` task in one idempotent
+  request.
+- Optional reminders require an ISO 8601 instant with an offset plus an IANA timezone. Natural
+  phrases are rejected so Nova can clarify ambiguity before writing.
+- `GET /api/agenda?timezone=America%2FLos_Angeles` returns Inbox, Overdue, Today, Upcoming,
+  Waiting, and Done sections derived from the durable cards.
+- Reminders can recur daily, weekly, monthly, or yearly at an explicit interval and optional end
+  instant. Their confirmed local wall-clock time survives daylight-saving changes, while monthly
+  and yearly calendar anchors survive short months.
+- `POST /api/cards/:id/reminders/acknowledge` is revision-guarded and idempotent. It stops a
+  one-time reminder or schedules the next recurring occurrence without completing the task.
+- Reminder sending is inactive by default. When `KANBAN_REMINDER_HOOK_URL` is configured, the
+  server polls due reminders, retries failures, and keeps durable delivery receipts.
+- `GET /api/reminders/status` reports configuration, pending/due counts, and recent receipts.
+- `POST /api/reminders/poll` previews due delivery by default; `{ "execute": true }` sends only
+  when a hook is configured.
+- `GET /api/review/daily` returns one explained, unblocked next action plus small wins and gentle
+  counts. Optional `availableMinutes` and `energy` preferences change the deterministic ranking.
+- `GET /api/review/weekly` starts with recent wins, then summarizes inbox, waiting work, open
+  projects, stale work, and tasks that still need a next step.
+- `POST /api/cards/:id/snooze` moves scheduling forward without deleting the original due date or
+  task history. It is revision-guarded and idempotent.
+- `POST /api/cards/:id/promote` turns a standalone captured task into a project in place, preserving
+  its card ID, task key, original wording, reminders, revision history, and source identity.
+- `POST /api/cards/:id/decompose` validates and previews a bounded milestone/task plan by default.
+  Explicit execution creates the complete hierarchy transactionally and idempotently.
+- Tasks can carry `energyDemand` (`UNKNOWN`, `LOW`, `MEDIUM`, or `HIGH`) alongside their existing
+  time estimate.
+
+Nova's exact conversational and retry behavior is documented in
+[`docs/nova-conversation-contract.md`](docs/nova-conversation-contract.md).
+
+### Reminder delivery contract
+
+Each due reminder uses a deterministic `deliveryId` derived from its stable task key and reminder
+instant. Retries send the same value in both the JSON body and `Idempotency-Key` header, allowing
+the receiver to deduplicate a response lost between delivery and receipt persistence. Delivery is
+therefore at least once: receivers must treat `deliveryId` as the side-effect identity.
+
+The hook receives `event: "reminder.due"`, a timestamp, the delivery ID, and a compact card payload
+containing task identity, title, original captured text, lane, priority, reminder time/timezone,
+recurrence metadata, due date, next action, and acceptance criteria. Only a 2xx response marks the
+reminder `DELIVERED`.
+Failures retain `PENDING`, increment the receipt attempt count, and are eligible for the next poll.
+Acknowledgement remains a separate user action and never marks the task itself complete.
+
 ## Development plan
-1. Scaffold web app + API
-2. Add board and card model
-3. Add OpenClaw-oriented workflow hooks
-4. Add tests and release docs
+
+1. Reliable capture and reminder semantics — **Delivered, including recurrence**
+2. Progressive decomposition and restart packets
+3. Daily/weekly review views with gentle prioritization — **Delivered**
+4. Nova conversational commands over the durable API — **Delivered foundation**
+5. Optional LoopX execution without giving up local notebook authority
 
 ## Workflow hook payload
 Set `OPENCLAW_WORKFLOW_HOOK_URL` on the server to receive JSON events:
 - `card.created`
+- `card.captured`
 - `card.updated`
 - `card.moved`
 - `card.deleted`

@@ -129,6 +129,115 @@ const migrations: Array<{ version: number; name: string; up: (db: SqliteDatabase
       `)
     },
   },
+  {
+    version: 4,
+    name: 'progressive_decomposition',
+    up: (db) => {
+      addColumn(db, 'cards', 'item_type', "TEXT NOT NULL DEFAULT 'TASK'")
+      addColumn(db, 'cards', 'parent_id', 'INTEGER REFERENCES cards(id) ON DELETE RESTRICT')
+      addColumn(db, 'cards', 'goal', "TEXT NOT NULL DEFAULT ''")
+      addColumn(db, 'cards', 'estimate_minutes', 'INTEGER')
+      addColumn(db, 'cards', 'position', 'INTEGER NOT NULL DEFAULT 0')
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS cards_parent_position_idx
+          ON cards(parent_id, position, id);
+
+        CREATE TABLE IF NOT EXISTS checklist_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          card_id INTEGER NOT NULL,
+          text TEXT NOT NULL,
+          is_done INTEGER NOT NULL DEFAULT 0 CHECK(is_done IN (0, 1)),
+          position INTEGER NOT NULL DEFAULT 0,
+          revision INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS checklist_items_card_position_idx
+          ON checklist_items(card_id, position, id);
+      `)
+    },
+  },
+  {
+    version: 5,
+    name: 'assistant_capture_and_reminders',
+    up: (db) => {
+      addColumn(db, 'cards', 'captured_text', "TEXT NOT NULL DEFAULT ''")
+      addColumn(db, 'cards', 'remind_at', 'TEXT')
+      addColumn(db, 'cards', 'reminder_timezone', "TEXT NOT NULL DEFAULT ''")
+      addColumn(db, 'cards', 'reminder_status', "TEXT NOT NULL DEFAULT 'NONE'")
+      addColumn(db, 'cards', 'reminder_acknowledged_at', 'TEXT')
+      addColumn(db, 'cards', 'reviewed_at', 'TEXT')
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS cards_reminder_schedule_idx
+          ON cards(reminder_status, remind_at, id);
+        CREATE INDEX IF NOT EXISTS cards_due_schedule_idx
+          ON cards(due_at, id);
+      `)
+    },
+  },
+  {
+    version: 6,
+    name: 'reminder_delivery_receipts',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS reminder_delivery_receipts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          delivery_id TEXT NOT NULL UNIQUE,
+          card_id INTEGER,
+          task_key TEXT NOT NULL,
+          remind_at TEXT NOT NULL,
+          reminder_timezone TEXT NOT NULL,
+          status TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          last_attempt_at TEXT,
+          delivered_at TEXT,
+          response_status INTEGER,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS reminder_delivery_receipts_status_idx
+          ON reminder_delivery_receipts(status, updated_at, id);
+        CREATE INDEX IF NOT EXISTS reminder_delivery_receipts_card_idx
+          ON reminder_delivery_receipts(card_id, id DESC);
+      `)
+    },
+  },
+  {
+    version: 7,
+    name: 'adhd_friendly_planning',
+    up: (db) => {
+      addColumn(db, 'cards', 'energy_demand', "TEXT NOT NULL DEFAULT 'UNKNOWN'")
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS cards_review_idx
+          ON cards(reviewed_at, updated_at, id);
+        CREATE INDEX IF NOT EXISTS cards_planning_idx
+          ON cards(lane, item_type, priority, energy_demand, estimate_minutes, id);
+      `)
+    },
+  },
+  {
+    version: 8,
+    name: 'recurring_reminders',
+    up: (db) => {
+      addColumn(db, 'cards', 'recurrence_frequency', "TEXT NOT NULL DEFAULT 'NONE'")
+      addColumn(db, 'cards', 'recurrence_interval', 'INTEGER NOT NULL DEFAULT 1')
+      addColumn(db, 'cards', 'recurrence_end_at', 'TEXT')
+      addColumn(db, 'cards', 'recurrence_occurrences', 'INTEGER NOT NULL DEFAULT 0')
+      addColumn(db, 'cards', 'recurrence_anchor_month', 'INTEGER NOT NULL DEFAULT 0')
+      addColumn(db, 'cards', 'recurrence_anchor_day', 'INTEGER NOT NULL DEFAULT 0')
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS cards_recurrence_idx
+          ON cards(recurrence_frequency, reminder_status, remind_at, id);
+      `)
+    },
+  },
 ]
 
 export const runMigrations = (db: SqliteDatabase) => {

@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': process.env.KANBAN_API_TARGET || 'http://localhost:3001',
     },
   },
 })

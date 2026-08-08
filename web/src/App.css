@@ -101,9 +101,299 @@ body {
 
 .new-card {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto auto;
+  grid-template-columns: 2fr 1fr 1fr auto auto auto auto auto;
   gap: 0.55rem;
   margin-bottom: 1rem;
+}
+
+.new-card > * {
+  min-width: 0;
+}
+
+.reminder-field {
+  display: grid;
+  gap: 0.18rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.reminder-field input {
+  height: 100%;
+}
+
+.notebook-views {
+  margin: -0.25rem 0 1rem;
+}
+
+.view-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.view-buttons button {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.4rem 0.62rem;
+}
+
+.view-buttons button.active {
+  border-color: #5f91ca;
+  color: var(--text);
+  background: #192941;
+}
+
+.view-buttons button span {
+  border-radius: 999px;
+  background: #26364d;
+  padding: 0.05rem 0.32rem;
+  font-size: 0.66rem;
+}
+
+.agenda-panel {
+  margin-top: 0.55rem;
+  border: 1px solid #31435e;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #111b2a, #101720);
+  padding: 0.65rem;
+}
+
+.delivery-panel {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  border: 1px solid #38526d;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #111d2a, #101820);
+  padding: 0.65rem;
+}
+
+.delivery-panel > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.delivery-panel span,
+.delivery-panel p,
+.delivery-panel small {
+  color: var(--muted);
+}
+
+.delivery-panel p {
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.review-panel {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.55rem;
+  border: 1px solid #3b5571;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #111d2a, #111821 60%, #151c25);
+  padding: 0.8rem;
+}
+
+.review-heading,
+.review-heading > div,
+.review-preferences,
+.review-counts,
+.focus-meta,
+.focus-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.review-heading {
+  justify-content: space-between;
+}
+
+.review-heading > div:first-child {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.review-panel .eyebrow {
+  color: #84b7ec;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.review-preferences label {
+  display: grid;
+  gap: 0.12rem;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.review-preferences select,
+.review-panel button {
+  border: 1px solid #3c5572;
+  border-radius: 8px;
+  background: #182539;
+  color: #cfe4ff;
+  cursor: pointer;
+  padding: 0.36rem 0.48rem;
+}
+
+.review-counts {
+  flex-wrap: wrap;
+}
+
+.review-counts span,
+.focus-meta span {
+  border-radius: 999px;
+  background: #1d2b3f;
+  color: #a9bdd7;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.66rem;
+}
+
+.focus-card {
+  border: 1px solid #506d8b;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #17263a, #121d2b);
+  padding: 0.75rem;
+}
+
+.focus-card h3 {
+  margin: 0.18rem 0;
+  color: #eef6ff;
+  font-size: 1.05rem;
+}
+
+.focus-card p,
+.focus-card ul,
+.quick-wins ul,
+.review-empty {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.focus-card p {
+  margin: 0 0 0.45rem;
+}
+
+.focus-card ul,
+.quick-wins ul {
+  margin: 0.55rem 0;
+  padding-left: 1.15rem;
+}
+
+.focus-actions button:first-child {
+  border-color: #456f67;
+  background: #17302e;
+  color: #a8e4d3;
+}
+
+.quick-wins {
+  border-top: 1px solid #2b3d53;
+  padding-top: 0.55rem;
+}
+
+.weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.weekly-grid section {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  border: 1px solid #2d4057;
+  border-radius: 10px;
+  background: #111a26;
+  padding: 0.55rem;
+}
+
+.weekly-grid section > strong {
+  color: #9ec9ff;
+  font-size: 1.1rem;
+}
+
+.weekly-grid section > span,
+.weekly-grid section > small {
+  color: var(--muted);
+}
+
+.weekly-grid section > small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agenda-heading,
+.agenda-panel li,
+.agenda-panel li div,
+.reminder-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agenda-heading {
+  justify-content: space-between;
+  color: #9ec9ff;
+  text-transform: capitalize;
+}
+
+.agenda-heading span,
+.agenda-panel li span,
+.agenda-panel time {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.agenda-panel ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agenda-panel li {
+  justify-content: space-between;
+  border-top: 1px solid #26364d;
+  padding-top: 0.4rem;
+}
+
+.agenda-panel li div {
+  flex-wrap: wrap;
+}
+
+.agenda-panel button,
+.reminder-chip button {
+  border: 1px solid #416b63;
+  border-radius: 8px;
+  background: #152a2a;
+  color: #9fe2ca;
+  cursor: pointer;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.68rem;
+}
+
+.reminder-chip {
+  justify-content: space-between;
+  margin-top: 0.55rem;
+  border: 1px solid #4d6146;
+  border-radius: 9px;
+  background: #1b251d;
+  color: #cce7bb;
+  padding: 0.42rem 0.5rem;
+  font-size: 0.72rem;
 }
 
 .new-card button,
@@ -187,6 +477,50 @@ body {
   font-size: 0.95rem;
 }
 
+.card-heading,
+.work-node-heading,
+.progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.type-badge,
+.lane-chip {
+  flex: 0 0 auto;
+  border: 1px solid #385172;
+  border-radius: 999px;
+  color: #9ec9ff;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.35rem;
+}
+
+.progress-wrap {
+  margin-top: 0.6rem;
+}
+
+.progress-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.progress-track {
+  height: 0.35rem;
+  margin-top: 0.28rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #202d3f;
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6da9ff, #80e0bc);
+}
+
 .card p {
   margin: 0.45rem 0;
   color: #bfd0e9;
@@ -254,6 +588,34 @@ body {
   color: #ffc3cb;
 }
 
+.actions .continue-button {
+  border-color: #4977ae;
+  color: #b9d7ff;
+}
+
+.restart-card {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.65rem;
+  border: 1px solid #416b63;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #12252a, #132033);
+  padding: 0.65rem;
+}
+
+.restart-card .eyebrow {
+  color: #80e0bc;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.restart-card > span:not(.eyebrow),
+.restart-card small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .card textarea {
   width: 100%;
   min-height: 3.7rem;
@@ -309,6 +671,7 @@ body {
 }
 
 .task-details dt,
+.work-breakdown h4,
 .event-history h4 {
   margin: 0;
   color: #9ec9ff;
@@ -316,6 +679,83 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.work-breakdown {
+  margin: 0.8rem 0;
+}
+
+.work-node {
+  margin-top: 0.45rem;
+  margin-left: calc(var(--depth) * 0.65rem);
+  border-left: 2px solid #334968;
+  border-radius: 0 8px 8px 0;
+  background: rgba(20, 31, 45, 0.7);
+  padding: 0.5rem;
+}
+
+.work-node-heading {
+  justify-content: flex-start;
+  color: #d9e6f8;
+  font-size: 0.76rem;
+}
+
+.work-node-heading > span:last-child {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.nested-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+
+.nested-actions button,
+.add-step button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #192538;
+  color: #b9d7ff;
+  cursor: pointer;
+  padding: 0.28rem 0.42rem;
+  font-size: 0.62rem;
+}
+
+.checklist {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.45rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #bfd0e9;
+  font-size: 0.72rem;
+}
+
+.checklist input:checked + span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.add-step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+
+.add-step input {
+  min-width: 0;
+  padding: 0.36rem 0.45rem;
+  font-size: 0.68rem;
 }
 
 .task-details dd {
@@ -384,5 +824,15 @@ body {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .review-heading,
+  .review-preferences {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .weekly-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
