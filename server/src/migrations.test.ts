@@ -31,13 +31,37 @@ describe('database migrations', () => {
       priority: 'P2',
       source: 'manual',
       revision: 1,
+      item_type: 'TASK',
+      goal: '',
+      captured_text: '',
+      reminder_status: 'NONE',
+      reminder_timezone: '',
+      energy_demand: 'UNKNOWN',
+      recurrence_frequency: 'NONE',
+      recurrence_interval: 1,
+      recurrence_occurrences: 0,
+      recurrence_anchor_month: 0,
+      recurrence_anchor_day: 0,
     })
     expect(card.task_key).toMatch(/^[0-9a-f-]{36}$/)
     expect(migrations).toEqual([
       { version: 1, name: 'initial_cards_and_activity' },
       { version: 2, name: 'loopx_task_foundation' },
       { version: 3, name: 'loopx_reconciliation_receipts' },
+      { version: 4, name: 'progressive_decomposition' },
+      { version: 5, name: 'assistant_capture_and_reminders' },
+      { version: 6, name: 'reminder_delivery_receipts' },
+      { version: 7, name: 'adhd_friendly_planning' },
+      { version: 8, name: 'recurring_reminders' },
     ])
+    expect(
+      database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'checklist_items'").get(),
+    ).toEqual({ name: 'checklist_items' })
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reminder_delivery_receipts'")
+        .get(),
+    ).toEqual({ name: 'reminder_delivery_receipts' })
     database.close()
   })
 })
