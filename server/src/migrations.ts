@@ -238,6 +238,43 @@ const migrations: Array<{ version: number; name: string; up: (db: SqliteDatabase
       `)
     },
   },
+  {
+    version: 9,
+    name: 'gentle_nudge_delivery',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS gentle_nudge_state (
+          card_id INTEGER PRIMARY KEY,
+          last_nudged_at TEXT NOT NULL,
+          nudge_count INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY(card_id) REFERENCES cards(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS gentle_nudge_receipts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nudge_id TEXT NOT NULL UNIQUE,
+          timezone TEXT NOT NULL,
+          window_key TEXT NOT NULL,
+          status TEXT NOT NULL,
+          item_count INTEGER NOT NULL,
+          card_ids TEXT NOT NULL,
+          message TEXT NOT NULL,
+          attempt_count INTEGER NOT NULL DEFAULT 0,
+          last_attempt_at TEXT,
+          delivered_at TEXT,
+          response_status INTEGER,
+          error TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS gentle_nudge_receipts_status_idx
+          ON gentle_nudge_receipts(status, updated_at, id);
+        CREATE INDEX IF NOT EXISTS gentle_nudge_receipts_window_idx
+          ON gentle_nudge_receipts(timezone, window_key, id);
+      `)
+    },
+  },
 ]
 
 export const runMigrations = (db: SqliteDatabase) => {

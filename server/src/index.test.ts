@@ -13,8 +13,16 @@ beforeEach(() => {
 afterEach(async () => {
   process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
   delete process.env.KANBAN_REMINDER_HOOK_URL
+  delete process.env.KANBAN_REMINDER_HOOK_TOKEN
   delete process.env.KANBAN_REMINDER_POLL_MS
   delete process.env.KANBAN_REMINDER_TIMEOUT_MS
+  delete process.env.KANBAN_NUDGE_HOOK_URL
+  delete process.env.KANBAN_NUDGE_HOOK_TOKEN
+  delete process.env.NOVA_KANBANX_HOOK_TOKEN
+  delete process.env.KANBAN_NUDGE_POLL_MS
+  delete process.env.KANBAN_NUDGE_TIMEZONE
+  delete process.env.KANBAN_NUDGE_QUIET_START_HOUR
+  delete process.env.KANBAN_NUDGE_QUIET_END_HOUR
   delete process.env.LOOPX_BIN
   delete process.env.LOOPX_GOAL_ID
   delete process.env.LOOPX_REGISTRY
@@ -468,6 +476,11 @@ describe('workflow hooks', () => {
       .send({ text: 'Clarify this thought later', eventId: 'evt-agenda-inbox' })
     await capture('Old reminder without guilt', '2026-08-06T18:00:00-07:00', 'evt-agenda-overdue')
     await capture('Pay car payment', '2026-08-07T18:00:00-07:00', 'evt-agenda-today')
+    await request(mod.app).post('/api/capture').send({
+      text: 'Date-only notebook reminder',
+      dueAt: '2026-08-07',
+      eventId: 'evt-agenda-date-only-today',
+    })
     await capture('Plan the weekend', '2026-08-08T09:00:00-07:00', 'evt-agenda-upcoming')
     await request(mod.app).post('/api/cards').send({
       title: 'Waiting for a callback',
@@ -488,14 +501,16 @@ describe('workflow hooks', () => {
     expect(agenda.body.counts).toMatchObject({
       inbox: 1,
       overdue: 1,
-      today: 1,
+      today: 2,
       upcoming: 1,
       waiting: 1,
       done: 1,
     })
     expect(agenda.body.sections.inbox[0].title).toBe('Clarify this thought later')
     expect(agenda.body.sections.overdue[0].title).toBe('Old reminder without guilt')
-    expect(agenda.body.sections.today[0].title).toBe('Pay car payment')
+    expect(agenda.body.sections.today.map((card: { title: string }) => card.title)).toEqual(
+      expect.arrayContaining(['Pay car payment', 'Date-only notebook reminder']),
+    )
     expect(agenda.body.sections.upcoming[0].title).toBe('Plan the weekend')
 
     const badTimezone = await request(mod.app).get('/api/agenda').query({ timezone: 'Mars/Olympus' })
@@ -597,6 +612,136 @@ describe('workflow hooks', () => {
       .send({ at: '2026-08-08T16:01:00Z', execute: true })
     expect(execute.status).toBe(409)
     expect(execute.body.error).toContain('not configured')
+  })
+
+  it('previews bundled gentle nudges by horizon and respects quiet hours', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    const mod = await import('./index.js')
+
+    await request(mod.app).post('/api/capture').send({
+      text: 'Today without a clock time',
+      dueAt: '2030-06-15',
+      eventId: 'evt-nudge-today',
+    })
+    await request(mod.app).post('/api/capture').send({
+      text: 'This week without a clock time',
+      dueAt: '2030-06-20',
+      eventId: 'evt-nudge-week',
+    })
+    await request(mod.app).post('/api/capture').send({
+      text: 'This month without a clock time',
+      dueAt: '2030-07-10',
+      eventId: 'evt-nudge-month',
+    })
+    await request(mod.app).post('/api/capture').send({
+      text: 'Undated notebook thought',
+      eventId: 'evt-nudge-undated',
+    })
+    await request(mod.app).post('/api/capture').send({
+      text: 'Exact timed reminder stays separate',
+      remindAt: '2030-06-15T17:00:00-07:00',
+      reminderTimezone: 'America/Los_Angeles',
+      eventId: 'evt-nudge-timed-excluded',
+    })
+    await request(mod.app).post('/api/cards').send({
+      title: 'Blocked work stays quiet',
+      lane: 'BLOCKED',
+      dueAt: '2030-06-15',
+      eventId: 'evt-nudge-blocked-excluded',
+    })
+
+    const quiet = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at: '2030-06-15T12:00:00Z',
+    })
+    expect(quiet.status).toBe(200)
+    expect(quiet.body).toMatchObject({
+      dryRun: true,
+      quietHours: { startHour: 21, endHour: 8, active: true },
+      summary: { eligible: 0, delivered: 0, failed: 0 },
+    })
+
+    const preview = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at: '2030-06-15T16:00:00Z',
+    })
+    expect(preview.status).toBe(200)
+    expect(preview.body).toMatchObject({
+      dryRun: true,
+      quietHours: { active: false },
+      summary: { eligible: 4, delivered: 0, failed: 0 },
+    })
+    expect(preview.body.message).toContain('4 reminders waiting')
+    expect(preview.body.items.map((item: { cadence: string }) => item.cadence)).toEqual(
+      expect.arrayContaining(['TODAY', 'WEEK', 'MONTH', 'UNDATED']),
+    )
+    expect(preview.body.items.map((item: { card: { title: string } }) => item.card.title)).not.toContain(
+      'Exact timed reminder stays separate',
+    )
+  })
+
+  it('delivers a gentle nudge once per cadence and retries failures with a stable id', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    process.env.KANBAN_NUDGE_HOOK_URL = 'https://example.test/nudges'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, status: 202 })
+      .mockResolvedValueOnce({ ok: true, status: 202 })
+    global.fetch = fetchMock as unknown as typeof fetch
+    const mod = await import('./index.js')
+
+    await request(mod.app).post('/api/capture').send({
+      text: 'Gentle three-hour check-in',
+      dueAt: '2030-06-15',
+      eventId: 'evt-nudge-delivery',
+    })
+    const at = '2030-06-15T16:00:00Z'
+
+    const failed = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at,
+      execute: true,
+    })
+    const retried = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at,
+      execute: true,
+    })
+    expect(failed.body).toMatchObject({ summary: { eligible: 1, delivered: 0, failed: 1 } })
+    expect(retried.body).toMatchObject({ summary: { eligible: 1, delivered: 1, failed: 0 } })
+    expect(retried.body.nudgeId).toBe(failed.body.nudgeId)
+    expect(retried.body.receipt).toMatchObject({ status: 'DELIVERED', attemptCount: 2 })
+    expect(fetchMock.mock.calls.slice(0, 2).map((call) => call[1]?.headers)).toEqual([
+      expect.objectContaining({ 'Idempotency-Key': failed.body.nudgeId }),
+      expect.objectContaining({ 'Idempotency-Key': failed.body.nudgeId }),
+    ])
+
+    const suppressed = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at,
+      execute: true,
+    })
+    expect(suppressed.body.summary).toEqual({ eligible: 0, delivered: 0, failed: 0 })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+
+    const threeHoursLater = await request(mod.app).post('/api/nudges/poll').send({
+      timezone: 'America/Los_Angeles',
+      at: '2030-06-15T19:00:00Z',
+      execute: true,
+    })
+    expect(threeHoursLater.body).toMatchObject({
+      summary: { eligible: 1, delivered: 1, failed: 0 },
+    })
+    expect(threeHoursLater.body.nudgeId).not.toBe(failed.body.nudgeId)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+
+    const status = await request(mod.app).get('/api/nudges/status').query({
+      timezone: 'America/Los_Angeles',
+      at: '2030-06-15T19:00:00Z',
+    })
+    expect(status.body.latestReceipts).toHaveLength(2)
+    expect(status.body.latestReceipts[0]).toMatchObject({ status: 'DELIVERED', attemptCount: 1 })
   })
 
   it('offers one explained daily focus and a wins-first weekly reset', async () => {

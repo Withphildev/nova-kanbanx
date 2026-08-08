@@ -53,6 +53,7 @@ describe('database migrations', () => {
       { version: 6, name: 'reminder_delivery_receipts' },
       { version: 7, name: 'adhd_friendly_planning' },
       { version: 8, name: 'recurring_reminders' },
+      { version: 9, name: 'gentle_nudge_delivery' },
     ])
     expect(
       database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'checklist_items'").get(),
@@ -62,6 +63,16 @@ describe('database migrations', () => {
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reminder_delivery_receipts'")
         .get(),
     ).toEqual({ name: 'reminder_delivery_receipts' })
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'gentle_nudge_state'")
+        .get(),
+    ).toEqual({ name: 'gentle_nudge_state' })
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'gentle_nudge_receipts'")
+        .get(),
+    ).toEqual({ name: 'gentle_nudge_receipts' })
     database.close()
   })
 })

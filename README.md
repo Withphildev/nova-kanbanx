@@ -14,8 +14,14 @@ Environment variables:
 - `KANBAN_DB_PATH` (optional absolute SQLite file path; defaults to `server/kanban.db`)
 - `OPENCLAW_WORKFLOW_HOOK_URL` (optional webhook endpoint)
 - `KANBAN_REMINDER_HOOK_URL` (optional reminder receiver; enables delivery polling)
+- `KANBAN_REMINDER_HOOK_TOKEN` (optional bearer token; falls back to `NOVA_KANBANX_HOOK_TOKEN`)
 - `KANBAN_REMINDER_POLL_MS` (delivery poll interval, default `60000`, minimum `1000`)
 - `KANBAN_REMINDER_TIMEOUT_MS` (per-attempt webhook timeout, default `5000`)
+- `KANBAN_NUDGE_HOOK_URL` (optional gentle-nudge receiver; falls back to the reminder hook)
+- `KANBAN_NUDGE_HOOK_TOKEN` (optional bearer token; falls back to the shared Nova token)
+- `KANBAN_NUDGE_POLL_MS` (nudge eligibility poll, default `900000` / 15 minutes)
+- `KANBAN_NUDGE_TIMEZONE` (automatic poll timezone, default `America/Los_Angeles`)
+- `KANBAN_NUDGE_QUIET_START_HOUR` / `KANBAN_NUDGE_QUIET_END_HOUR` (defaults `21` / `8`)
 - `LOOPX_GOAL_ID` (enables the LoopX adapter for this goal)
 - `LOOPX_BIN` (LoopX executable, default `loopx`)
 - `LOOPX_REGISTRY` / `LOOPX_PROJECT` (optional explicit LoopX paths)
@@ -148,6 +154,15 @@ The product principles and delivery roadmap are documented in
 - `GET /api/reminders/status` reports configuration, pending/due counts, and recent receipts.
 - `POST /api/reminders/poll` previews due delivery by default; `{ "execute": true }` sends only
   when a hook is configured.
+- Date-level and undated notebook items can receive bundled gentle nudges without gaining an
+  invented alert time. Today items are eligible every three hours, overdue and week-level items
+  daily, month-level and undated items weekly, and longer-range items monthly.
+- Gentle nudges are quiet from 9 PM through 8 AM by default, suppress recently edited or surfaced
+  tasks, exclude blocked/done work and exact-time reminders, and bundle up to eight visible items
+  into one calm prompt.
+- `GET /api/nudges/status` shows current eligibility, quiet-hour state, configuration, and durable
+  receipts. `POST /api/nudges/poll` previews by default; `{ "execute": true }` sends a bundle only
+  when a nudge or reminder hook is configured.
 - `GET /api/review/daily` returns one explained, unblocked next action plus small wins and gentle
   counts. Optional `availableMinutes` and `energy` preferences change the deterministic ranking.
 - `GET /api/review/weekly` starts with recent wins, then summarizes inbox, waiting work, open
@@ -177,6 +192,18 @@ recurrence metadata, due date, next action, and acceptance criteria. Only a 2xx 
 reminder `DELIVERED`.
 Failures retain `PENDING`, increment the receipt attempt count, and are eligible for the next poll.
 Acknowledgement remains a separate user action and never marks the task itself complete.
+
+### Gentle nudge delivery contract
+
+Each three-hour active window has a deterministic `nudgeId`. Failed delivery retries within that
+window reuse the same JSON id and `Idempotency-Key`; successful delivery updates per-card nudge
+state without revising the task or adding audit noise. The hook receives
+`event: "gentle_nudge.due"`, one non-judgmental message, the timezone, and a compact list of eligible
+items with cadence and reason. Multiple tasks are one digest, never one notification per card.
+
+Recent task updates count as recent attention, so a newly captured or edited item is not immediately
+echoed back. Successful delivery starts the next cadence window. Quiet hours and cadence are
+derived in the configured IANA timezone.
 
 ## Development plan
 
