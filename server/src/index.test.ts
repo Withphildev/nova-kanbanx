@@ -95,6 +95,12 @@ describe('workflow hooks', () => {
     const createRes = await request(mod.app).post('/api/cards').send({ title: 'Delete me' })
     expect(createRes.status).toBe(201)
     const id = createRes.body.card.id as number
+    const checklist = await request(mod.app).post(`/api/cards/${id}/checklist`).send({
+      text: 'Temporary child step',
+      expectedRevision: 1,
+      eventId: 'evt-delete-checklist',
+    })
+    expect(checklist.status).toBe(201)
 
     const deleteRes = await request(mod.app).delete(`/api/cards/${id}`)
     expect(deleteRes.status).toBe(204)
@@ -102,6 +108,26 @@ describe('workflow hooks', () => {
     const cardsRes = await request(mod.app).get('/api/cards')
     expect(cardsRes.status).toBe(200)
     expect((cardsRes.body.cards as Array<{ id: number }>).some((c) => c.id === id)).toBe(false)
+
+    const deletedChecklist = await request(mod.app)
+      .patch(`/api/checklist-items/${checklist.body.item.id}`)
+      .send({ isDone: true, expectedRevision: 1 })
+    expect(deletedChecklist.status).toBe(404)
+
+    const events = await request(mod.app).get(`/api/cards/${id}/events`)
+    expect(events.body.events.map((event: { eventType: string }) => event.eventType)).toEqual([
+      'card.created',
+      'checklist.created',
+      'card.deleted',
+    ])
+
+    const activity = await request(mod.app).get('/api/activity')
+    expect(activity.body.activity).toContainEqual(
+      expect.objectContaining({ card_id: null, action: 'card.deleted', detail: `card:${id}` }),
+    )
+    expect(
+      activity.body.activity.some((entry: { card_id: number | null }) => entry.card_id === id),
+    ).toBe(false)
   })
 
   it('persists LoopX task fields with stable defaults', async () => {
@@ -136,19 +162,58 @@ describe('workflow hooks', () => {
     )
   })
 
+  it('separates flexible due dates from exact delivery instants', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    const mod = await import('./index.js')
+
+    const calendarDue = await request(mod.app).post('/api/cards').send({
+      title: 'Calendar planning date',
+      dueAt: '2026-09-15',
+      eventId: 'evt-date-semantics-calendar',
+    })
+    const exactDue = await request(mod.app).post('/api/cards').send({
+      title: 'Exact planning instant',
+      dueAt: '2026-09-15T09:00:00-07:00',
+      eventId: 'evt-date-semantics-exact',
+    })
+    const ambiguousDue = await request(mod.app).post('/api/cards').send({
+      title: 'Ambiguous planning time',
+      dueAt: '2026-09-15T09:00:00',
+      eventId: 'evt-date-semantics-ambiguous',
+    })
+    const impossibleDue = await request(mod.app).post('/api/cards').send({
+      title: 'Impossible calendar date',
+      dueAt: '2026-02-30',
+      eventId: 'evt-date-semantics-impossible',
+    })
+
+    expect(calendarDue.status).toBe(201)
+    expect(calendarDue.body.card.dueAt).toBe('2026-09-15')
+    expect(exactDue.status).toBe(201)
+    expect(ambiguousDue.status).toBe(400)
+    expect(ambiguousDue.body.error).toContain('YYYY-MM-DD or an ISO instant with an offset')
+    expect(impossibleDue.status).toBe(400)
+  })
+
   it('rejects invalid lifecycle jumps and records valid transitions', async () => {
     process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
     const mod = await import('./index.js')
     const createRes = await request(mod.app).post('/api/cards').send({ title: 'Lifecycle task' })
     const id = createRes.body.card.id as number
 
-    const invalid = await request(mod.app).patch(`/api/cards/${id}`).send({ lane: 'RUNNING' })
+    const invalid = await request(mod.app)
+      .patch(`/api/cards/${id}`)
+      .send({ lane: 'RUNNING', expectedRevision: 1 })
     expect(invalid.status).toBe(409)
     expect(invalid.body.allowedTransitions).toEqual(['TODO'])
 
+    let revision = 1
     for (const lane of ['TODO', 'READY', 'RUNNING', 'DONE']) {
-      const move = await request(mod.app).patch(`/api/cards/${id}`).send({ lane })
+      const move = await request(mod.app)
+        .patch(`/api/cards/${id}`)
+        .send({ lane, expectedRevision: revision })
       expect(move.status).toBe(200)
+      revision = move.body.card.revision
     }
 
     const cardsRes = await request(mod.app).get('/api/cards')
@@ -203,6 +268,61 @@ describe('workflow hooks', () => {
     expect(events.body.events.map((event: { eventId: string }) => event.eventId)).toEqual([
       'evt-revision-create',
       'evt-update-1',
+    ])
+  })
+
+  it('requires expectedRevision on every local update path', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    const mod = await import('./index.js')
+    const created = await request(mod.app).post('/api/cards').send({
+      title: 'Revision required everywhere',
+      eventId: 'evt-required-revision-create',
+    })
+    const id = created.body.card.id as number
+    const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+    const missingPatch = await request(mod.app)
+      .patch(`/api/cards/${id}`)
+      .send({ title: 'Must not update', eventId: 'evt-required-revision-patch' })
+    const missingSnooze = await request(mod.app)
+      .post(`/api/cards/${id}/snooze`)
+      .send({
+        until,
+        timezone: 'America/Los_Angeles',
+        eventId: 'evt-required-revision-snooze',
+      })
+    const missingChecklistCreate = await request(mod.app)
+      .post(`/api/cards/${id}/checklist`)
+      .send({ text: 'Must not create', eventId: 'evt-required-revision-checklist-create' })
+
+    for (const response of [missingPatch, missingSnooze, missingChecklistCreate]) {
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('expectedRevision is required')
+    }
+
+    const checklist = await request(mod.app).post(`/api/cards/${id}/checklist`).send({
+      text: 'Created with a revision',
+      expectedRevision: 1,
+      eventId: 'evt-required-revision-checklist-valid',
+    })
+    expect(checklist.status).toBe(201)
+
+    const missingChecklistUpdate = await request(mod.app)
+      .patch(`/api/checklist-items/${checklist.body.item.id}`)
+      .send({ isDone: true, eventId: 'evt-required-revision-checklist-update' })
+    expect(missingChecklistUpdate.status).toBe(400)
+    expect(missingChecklistUpdate.body.error).toContain('expectedRevision is required')
+
+    const stalePatch = await request(mod.app)
+      .patch(`/api/cards/${id}`)
+      .send({ title: 'Stale', expectedRevision: 1, eventId: 'evt-required-revision-stale' })
+    expect(stalePatch.status).toBe(409)
+    expect(stalePatch.body).toMatchObject({ error: 'revision conflict', currentRevision: 2 })
+
+    const events = await request(mod.app).get(`/api/cards/${id}/events`)
+    expect(events.body.events.map((event: { eventType: string }) => event.eventType)).toEqual([
+      'card.created',
+      'checklist.created',
     ])
   })
 
@@ -865,6 +985,7 @@ describe('workflow hooks', () => {
 
     const secondItem = await request(mod.app).post(`/api/cards/${task.body.card.id}/checklist`).send({
       text: 'Do not confuse this item with the first',
+      expectedRevision: 3,
       eventId: 'evt-checklist-second',
     })
     const crossItemReplay = await request(mod.app)
@@ -885,11 +1006,17 @@ describe('workflow hooks', () => {
       blockers: [],
     })
 
+    let taskRevision = secondItem.body.card.revision as number
     for (const lane of ['TODO', 'READY', 'RUNNING', 'DONE']) {
       const move = await request(mod.app)
         .patch(`/api/cards/${task.body.card.id}`)
-        .send({ lane, eventId: `evt-progress-${lane.toLowerCase()}` })
+        .send({
+          lane,
+          expectedRevision: taskRevision,
+          eventId: `evt-progress-${lane.toLowerCase()}`,
+        })
       expect(move.status).toBe(200)
+      taskRevision = move.body.card.revision
     }
     const completedRestart = await request(mod.app).get(
       `/api/cards/${project.body.card.id}/restart-packet`,

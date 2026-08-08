@@ -32,18 +32,24 @@ const run = async () => {
   if (!Number.isInteger(cardId)) {
     throw new Error('create failed: missing card id')
   }
+  let revision = created.card.revision
 
   for (const lane of ['TODO', 'READY', 'RUNNING', 'DONE']) {
-    await requestJson(
+    const moved = await requestJson(
       `/api/cards/${cardId}`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lane, eventId: `smoke-${cardId}-${lane.toLowerCase()}` }),
+        body: JSON.stringify({
+          lane,
+          expectedRevision: revision,
+          eventId: `smoke-${cardId}-${lane.toLowerCase()}`,
+        }),
       },
       200,
       `move to ${lane}`,
     )
+    revision = moved.card.revision
   }
 
   await requestJson(`/api/cards/${cardId}`, { method: 'DELETE' }, 204, 'delete')
