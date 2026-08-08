@@ -680,6 +680,28 @@ describe('workflow hooks', () => {
     )
   })
 
+  it('uses the configured nudge timezone when a poll omits one', async () => {
+    process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
+    process.env.KANBAN_NUDGE_TIMEZONE = 'Pacific/Honolulu'
+    const mod = await import('./index.js')
+
+    await request(mod.app).post('/api/capture').send({
+      text: 'Use the configured timezone',
+      dueAt: '2030-06-15',
+      eventId: 'evt-nudge-configured-timezone',
+    })
+    const preview = await request(mod.app).post('/api/nudges/poll').send({
+      at: '2030-06-15T16:00:00Z',
+    })
+
+    expect(preview.status).toBe(200)
+    expect(preview.body).toMatchObject({
+      timezone: 'Pacific/Honolulu',
+      quietHours: { active: true },
+      summary: { eligible: 0 },
+    })
+  })
+
   it('delivers a gentle nudge once per cadence and retries failures with a stable id', async () => {
     process.env.OPENCLAW_WORKFLOW_HOOK_URL = ''
     process.env.KANBAN_NUDGE_HOOK_URL = 'https://example.test/nudges'
@@ -691,7 +713,7 @@ describe('workflow hooks', () => {
     global.fetch = fetchMock as unknown as typeof fetch
     const mod = await import('./index.js')
 
-    await request(mod.app).post('/api/capture').send({
+    const captured = await request(mod.app).post('/api/capture').send({
       text: 'Gentle three-hour check-in',
       dueAt: '2030-06-15',
       eventId: 'evt-nudge-delivery',
@@ -702,6 +724,12 @@ describe('workflow hooks', () => {
       timezone: 'America/Los_Angeles',
       at,
       execute: true,
+    })
+    const firstPayload = String(fetchMock.mock.calls[0]?.[1]?.body)
+    await request(mod.app).patch(`/api/cards/${captured.body.card.id}`).send({
+      title: 'Edited after the first delivery attempt',
+      expectedRevision: captured.body.card.revision,
+      eventId: 'evt-nudge-edit-between-attempts',
     })
     const retried = await request(mod.app).post('/api/nudges/poll').send({
       timezone: 'America/Los_Angeles',
@@ -716,6 +744,7 @@ describe('workflow hooks', () => {
       expect.objectContaining({ 'Idempotency-Key': failed.body.nudgeId }),
       expect.objectContaining({ 'Idempotency-Key': failed.body.nudgeId }),
     ])
+    expect(String(fetchMock.mock.calls[1]?.[1]?.body)).toBe(firstPayload)
 
     const suppressed = await request(mod.app).post('/api/nudges/poll').send({
       timezone: 'America/Los_Angeles',

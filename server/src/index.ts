@@ -8,6 +8,7 @@ import path from 'node:path'
 import { loadEnvFile } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { runMigrations } from './migrations.js'
+import { createGentleNudgeService } from './gentle-nudges.js'
 import {
   listLoopxTodos,
   loopxConfigFromEnv,
@@ -174,31 +175,6 @@ type ReminderDeliveryReceiptRow = {
   remind_at: string
   reminder_timezone: string
   status: 'ATTEMPTING' | 'FAILED' | 'DELIVERED'
-  attempt_count: number
-  last_attempt_at: string | null
-  delivered_at: string | null
-  response_status: number | null
-  error: string | null
-  created_at: string
-  updated_at: string
-}
-
-type GentleNudgeCadence = 'TODAY' | 'OVERDUE' | 'WEEK' | 'MONTH' | 'LATER' | 'UNDATED'
-
-type GentleNudgeStateRow = {
-  card_id: number
-  last_nudged_at: string
-  nudge_count: number
-}
-
-type GentleNudgeReceiptRow = {
-  nudge_id: string
-  timezone: string
-  window_key: string
-  status: 'ATTEMPTING' | 'FAILED' | 'DELIVERED'
-  item_count: number
-  card_ids: string
-  message: string
   attempt_count: number
   last_attempt_at: string | null
   delivered_at: string | null
@@ -1074,288 +1050,22 @@ const runReminderPoll = (at = new Date().toISOString()) => {
   return reminderPollInFlight
 }
 
-const hourMs = 60 * 60 * 1000
-const dayMs = 24 * hourMs
-const gentleNudgeIntervals: Record<GentleNudgeCadence, number> = {
-  TODAY: 3 * hourMs,
-  OVERDUE: dayMs,
-  WEEK: dayMs,
-  MONTH: 7 * dayMs,
-  LATER: 30 * dayMs,
-  UNDATED: 7 * dayMs,
-}
-
-const isQuietHour = (hour: number) =>
-  nudgeQuietStartHour > nudgeQuietEndHour
-    ? hour >= nudgeQuietStartHour || hour < nudgeQuietEndHour
-    : hour >= nudgeQuietStartHour && hour < nudgeQuietEndHour
-
-const calendarDayNumber = (key: string) => Date.parse(`${key}T00:00:00.000Z`) / dayMs
-
-const cadenceForCard = (row: CardRow, todayKey: string, timezone: string): GentleNudgeCadence => {
-  if (!row.due_at) return 'UNDATED'
-  const dueKey = planningDateKey(row.due_at, timezone)
-  const daysUntilDue = calendarDayNumber(dueKey) - calendarDayNumber(todayKey)
-  if (daysUntilDue < 0) return 'OVERDUE'
-  if (daysUntilDue === 0) return 'TODAY'
-  if (daysUntilDue <= 7) return 'WEEK'
-  if (daysUntilDue <= 31) return 'MONTH'
-  return 'LATER'
-}
-
-type GentleNudgeItem = {
-  card: ReturnType<typeof cardRowToJson>
-  cadence: GentleNudgeCadence
-  reason: string
-}
-
-type GentleNudgePlan = {
-  generatedAt: string
-  timezone: string
-  quietHours: { startHour: number; endHour: number; active: boolean }
-  windowKey: string
-  nudgeId: string
-  message: string | null
-  items: GentleNudgeItem[]
-  overflowCount: number
-}
-
-const nudgeReason = (cadence: GentleNudgeCadence) => {
-  if (cadence === 'TODAY') return 'It is on today’s list and has no alert time.'
-  if (cadence === 'OVERDUE') return 'It is still open from an earlier day; this is information, not failure.'
-  if (cadence === 'WEEK') return 'It is coming up within seven days.'
-  if (cadence === 'MONTH') return 'It is coming up within the next month.'
-  if (cadence === 'LATER') return 'It is a longer-range item worth keeping visible occasionally.'
-  return 'It is an undated captured note that has been quiet for a week.'
-}
-
-const gentleNudgeMessage = (items: GentleNudgeItem[], overflowCount: number) => {
-  if (items.length === 0) return null
-  if (items.length === 1 && overflowCount === 0) {
-    return `Gentle reminder: ${items[0]!.card.title} is still on your list. No pressure—would you like to handle it, move it, or leave it for later?`
-  }
-  const total = items.length + overflowCount
-  return `You have ${total} reminders waiting. Want to choose one, move something, or leave them for later?`
-}
-
-const gentleNudgePlan = (at: string, timezone: string): GentleNudgePlan => {
-  const now = new Date(at)
-  const local = localDateTimeParts(now, timezone)
-  const todayKey = localDateKey(now, timezone)
-  const quiet = isQuietHour(local.hour)
-  const bucket = Math.max(0, Math.floor((local.hour - nudgeQuietEndHour) / 3))
-  const windowKey = `${todayKey}:${bucket}`
-  const nudgeId = `kanban-nudge-${createHash('sha256')
-    .update(`${timezone}:${windowKey}`)
-    .digest('hex')
-    .slice(0, 32)}`
-
-  if (quiet) {
-    return {
-      generatedAt: now.toISOString(),
-      timezone,
-      quietHours: { startHour: nudgeQuietStartHour, endHour: nudgeQuietEndHour, active: true },
-      windowKey,
-      nudgeId,
-      message: null,
-      items: [],
-      overflowCount: 0,
-    }
-  }
-
-  const rows = db
-    .prepare(
-      `SELECT * FROM cards
-       WHERE lane NOT IN ('DONE', 'BLOCKED')
-         AND item_type = 'TASK'
-         AND (remind_at IS NULL OR reminder_status = 'NONE')
-         AND (due_at IS NOT NULL OR (source = 'nova' AND captured_text != ''))
-       ORDER BY due_at IS NULL ASC, due_at ASC, priority ASC, id ASC`,
-    )
-    .all() as CardRow[]
-  const states = new Map(
-    (db.prepare('SELECT * FROM gentle_nudge_state').all() as GentleNudgeStateRow[]).map((row) => [
-      row.card_id,
-      row,
-    ]),
-  )
-
-  const eligible = rows
-    .map((row) => {
-      const cadence = cadenceForCard(row, todayKey, timezone)
-      const state = states.get(row.id)
-      const recentTimes = [row.updated_at, row.reviewed_at, state?.last_nudged_at]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => new Date(value).getTime())
-      const mostRecent = Math.max(...recentTimes)
-      return { row, cadence, eligible: now.getTime() - mostRecent >= gentleNudgeIntervals[cadence] }
-    })
-    .filter((candidate) => candidate.eligible)
-
-  const visible = eligible.slice(0, 8)
-  const items = visible.map(({ row, cadence }) => ({
-    card: cardRowToJson(row),
-    cadence,
-    reason: nudgeReason(cadence),
-  }))
-  const overflowCount = Math.max(0, eligible.length - visible.length)
-  return {
-    generatedAt: now.toISOString(),
-    timezone,
-    quietHours: { startHour: nudgeQuietStartHour, endHour: nudgeQuietEndHour, active: false },
-    windowKey,
-    nudgeId,
-    message: gentleNudgeMessage(items, overflowCount),
-    items,
-    overflowCount,
-  }
-}
-
-const gentleNudgeReceiptToJson = (row: GentleNudgeReceiptRow) => ({
-  nudgeId: row.nudge_id,
-  timezone: row.timezone,
-  windowKey: row.window_key,
-  status: row.status,
-  itemCount: row.item_count,
-  cardIds: JSON.parse(row.card_ids) as number[],
-  message: row.message,
-  attemptCount: row.attempt_count,
-  lastAttemptAt: row.last_attempt_at,
-  deliveredAt: row.delivered_at,
-  responseStatus: row.response_status,
-  error: row.error,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
+const gentleNudges = createGentleNudgeService({
+  db,
+  config: {
+    hookUrl: nudgeHookUrl,
+    hookToken: nudgeHookToken,
+    timeoutMs: reminderTimeoutMs,
+    pollMs: nudgePollMs,
+    timezone: nudgeTimezone,
+    quietStartHour: nudgeQuietStartHour,
+    quietEndHour: nudgeQuietEndHour,
+  },
+  serializeCard: cardRowToJson,
+  localDateKey,
+  planningDateKey,
+  localHour: (instant, timezone) => localDateTimeParts(instant, timezone).hour,
 })
-
-type GentleNudgePollResult = GentleNudgePlan & {
-  ok: true
-  dryRun: boolean
-  summary: { eligible: number; delivered: number; failed: number }
-  receipt?: ReturnType<typeof gentleNudgeReceiptToJson>
-}
-
-let gentleNudgePollInFlight: Promise<GentleNudgePollResult> | null = null
-
-const executeGentleNudgePoll = async (at: string, timezone: string): Promise<GentleNudgePollResult> => {
-  const plan = gentleNudgePlan(at, timezone)
-  if (plan.items.length === 0 || !plan.message) {
-    return { ...plan, ok: true, dryRun: false, summary: { eligible: 0, delivered: 0, failed: 0 } }
-  }
-
-  const cardIds = plan.items.map((item) => item.card.id)
-  const attemptAt = new Date().toISOString()
-  db.prepare(
-    `INSERT OR IGNORE INTO gentle_nudge_receipts
-      (nudge_id, timezone, window_key, status, item_count, card_ids, message,
-       attempt_count, created_at, updated_at)
-     VALUES (?, ?, ?, 'FAILED', ?, ?, ?, 0, ?, ?)`,
-  ).run(
-    plan.nudgeId,
-    timezone,
-    plan.windowKey,
-    cardIds.length + plan.overflowCount,
-    JSON.stringify(cardIds),
-    plan.message,
-    attemptAt,
-    attemptAt,
-  )
-  db.prepare(
-    `UPDATE gentle_nudge_receipts
-     SET status = 'ATTEMPTING', attempt_count = attempt_count + 1,
-         last_attempt_at = ?, response_status = NULL, error = NULL, updated_at = ?
-     WHERE nudge_id = ? AND status != 'DELIVERED'`,
-  ).run(attemptAt, attemptAt, plan.nudgeId)
-
-  let responseStatus: number | null = null
-  let deliveryError: string | null = null
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), reminderTimeoutMs)
-    try {
-      const response = await fetch(nudgeHookUrl!, {
-        method: 'POST',
-        headers: deliveryHeaders(nudgeHookToken, plan.nudgeId),
-        signal: controller.signal,
-        body: JSON.stringify({
-          event: 'gentle_nudge.due',
-          nudgeId: plan.nudgeId,
-          timestamp: attemptAt,
-          timezone,
-          message: plan.message,
-          overflowCount: plan.overflowCount,
-          items: plan.items.map((item) => ({
-            id: item.card.id,
-            taskKey: item.card.taskKey,
-            title: item.card.title,
-            lane: item.card.lane,
-            priority: item.card.priority,
-            dueAt: item.card.dueAt,
-            nextAction: item.card.nextAction,
-            cadence: item.cadence,
-            reason: item.reason,
-          })),
-        }),
-      })
-      responseStatus = response.status
-      if (!response.ok) deliveryError = `nudge hook returned HTTP ${response.status}`
-    } finally {
-      clearTimeout(timeout)
-    }
-  } catch (error) {
-    deliveryError = error instanceof Error ? error.message : String(error)
-  }
-
-  if (deliveryError === null) {
-    const deliveredAt = new Date().toISOString()
-    db.transaction(() => {
-      db.prepare(
-        `UPDATE gentle_nudge_receipts
-         SET status = 'DELIVERED', delivered_at = ?, response_status = ?, error = NULL, updated_at = ?
-         WHERE nudge_id = ?`,
-      ).run(deliveredAt, responseStatus, deliveredAt, plan.nudgeId)
-      const upsertState = db.prepare(
-        `INSERT INTO gentle_nudge_state (card_id, last_nudged_at, nudge_count)
-         VALUES (?, ?, 1)
-         ON CONFLICT(card_id) DO UPDATE SET
-           last_nudged_at = excluded.last_nudged_at,
-           nudge_count = gentle_nudge_state.nudge_count + 1`,
-      )
-      for (const cardId of cardIds) upsertState.run(cardId, at)
-    })()
-  } else {
-    const failedAt = new Date().toISOString()
-    db.prepare(
-      `UPDATE gentle_nudge_receipts
-       SET status = 'FAILED', response_status = ?, error = ?, updated_at = ?
-       WHERE nudge_id = ?`,
-    ).run(responseStatus, deliveryError.slice(0, 1000), failedAt, plan.nudgeId)
-  }
-
-  const receipt = db
-    .prepare('SELECT * FROM gentle_nudge_receipts WHERE nudge_id = ?')
-    .get(plan.nudgeId) as GentleNudgeReceiptRow
-  return {
-    ...plan,
-    ok: true,
-    dryRun: false,
-    summary: {
-      eligible: plan.items.length + plan.overflowCount,
-      delivered: deliveryError === null ? 1 : 0,
-      failed: deliveryError === null ? 0 : 1,
-    },
-    receipt: gentleNudgeReceiptToJson(receipt),
-  }
-}
-
-const runGentleNudgePoll = (at = new Date().toISOString(), timezone = 'America/Los_Angeles') => {
-  if (!gentleNudgePollInFlight) {
-    gentleNudgePollInFlight = executeGentleNudgePoll(at, timezone).finally(() => {
-      gentleNudgePollInFlight = null
-    })
-  }
-  return gentleNudgePollInFlight
-}
 
 app.get('/api/health', (_req, res) => {
   try {
@@ -1431,35 +1141,27 @@ app.post('/api/reminders/poll', async (req, res) => {
 
 app.get('/api/nudges/status', (req, res) => {
   const timezone =
-    typeof req.query.timezone === 'string' ? req.query.timezone.trim() : 'America/Los_Angeles'
+    typeof req.query.timezone === 'string' ? req.query.timezone.trim() : nudgeTimezone
   if (!validTimezone(timezone)) return res.status(400).json({ error: 'invalid timezone' })
   const at = typeof req.query.at === 'string' ? req.query.at.trim() : new Date().toISOString()
   if (!validInstant(at)) {
     return res.status(400).json({ error: 'invalid at; use an ISO instant with an offset' })
   }
-  const plan = gentleNudgePlan(at, timezone)
-  const receipts = db
-    .prepare('SELECT * FROM gentle_nudge_receipts ORDER BY id DESC LIMIT 20')
-    .all() as GentleNudgeReceiptRow[]
   return res.json({
     ok: true,
-    configured: Boolean(nudgeHookUrl),
-    pollMs: nudgePollMs,
-    ...plan,
-    summary: { eligible: plan.items.length + plan.overflowCount },
-    latestReceipts: receipts.map(gentleNudgeReceiptToJson),
+    ...gentleNudges.status(at, timezone),
   })
 })
 
 app.post('/api/nudges/poll', async (req, res) => {
   const timezone =
-    typeof req.body?.timezone === 'string' ? req.body.timezone.trim() : 'America/Los_Angeles'
+    typeof req.body?.timezone === 'string' ? req.body.timezone.trim() : nudgeTimezone
   if (!validTimezone(timezone)) return res.status(400).json({ error: 'invalid timezone' })
   const at = typeof req.body?.at === 'string' ? req.body.at.trim() : new Date().toISOString()
   if (!validInstant(at)) {
     return res.status(400).json({ error: 'invalid at; use an ISO instant with an offset' })
   }
-  const plan = gentleNudgePlan(at, timezone)
+  const plan = gentleNudges.plan(at, timezone)
   if (req.body?.execute !== true) {
     return res.json({
       ...plan,
@@ -1468,10 +1170,10 @@ app.post('/api/nudges/poll', async (req, res) => {
       summary: { eligible: plan.items.length + plan.overflowCount, delivered: 0, failed: 0 },
     })
   }
-  if (plan.items.length > 0 && !nudgeHookUrl) {
+  if (!nudgeHookUrl && gentleNudges.requiresDelivery(plan)) {
     return res.status(409).json({ error: 'gentle nudge delivery is not configured' })
   }
-  return res.json(await runGentleNudgePoll(at, timezone))
+  return res.json(await gentleNudges.runPoll(at, timezone))
 })
 
 app.get('/api/loopx/status', async (_req, res) => {
@@ -2902,11 +2604,11 @@ if (process.env.NODE_ENV !== 'test') {
     }
     if (nudgeHookUrl) {
       console.log(`gentle nudge delivery enabled (polling every ${nudgePollMs}ms)`)
-      void runGentleNudgePoll(new Date().toISOString(), nudgeTimezone).catch((error) =>
+      void gentleNudges.runPoll().catch((error) =>
         console.error('gentle nudge poll failed', error),
       )
       const nudgeTimer = setInterval(() => {
-        void runGentleNudgePoll(new Date().toISOString(), nudgeTimezone).catch((error) =>
+        void gentleNudges.runPoll().catch((error) =>
           console.error('gentle nudge poll failed', error),
         )
       }, nudgePollMs)

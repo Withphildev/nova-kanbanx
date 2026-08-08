@@ -275,6 +275,13 @@ const migrations: Array<{ version: number; name: string; up: (db: SqliteDatabase
       `)
     },
   },
+  {
+    version: 10,
+    name: 'freeze_gentle_nudge_payloads',
+    up: (db) => {
+      addColumn(db, 'gentle_nudge_receipts', 'payload', 'TEXT')
+    },
+  },
 ]
 
 export const runMigrations = (db: SqliteDatabase) => {

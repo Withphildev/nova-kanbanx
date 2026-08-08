@@ -28,6 +28,9 @@ Environment variables:
 - `LOOPX_AGENT_ID` (optional lifecycle actor for write-back commands)
 - `LOOPX_TIMEOUT_MS` (CLI timeout, default `5000`)
 
+Keep hook URLs on localhost or use HTTPS whenever delivery leaves the machine. Bearer tokens are
+credentials and must not be sent over unencrypted HTTP.
+
 ## Validation
 - `npm test`
 - `npm run build`
@@ -195,9 +198,10 @@ Acknowledgement remains a separate user action and never marks the task itself c
 
 ### Gentle nudge delivery contract
 
-Each three-hour active window has a deterministic `nudgeId`. Failed delivery retries within that
-window reuse the same JSON id and `Idempotency-Key`; successful delivery updates per-card nudge
-state without revising the task or adding audit noise. The hook receives
+Each three-hour active window has a deterministic `nudgeId`. The first attempt durably freezes the
+complete delivery payload; failed retries within that window reuse the same JSON body and
+`Idempotency-Key`, even if a card is edited between attempts. Successful delivery updates per-card
+nudge state without revising the task or adding audit noise. The hook receives
 `event: "gentle_nudge.due"`, one non-judgmental message, the timezone, and a compact list of eligible
 items with cadence and reason. Multiple tasks are one digest, never one notification per card.
 
